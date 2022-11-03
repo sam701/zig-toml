@@ -29,7 +29,15 @@ const StringContext = struct {
 
 fn charTester(ctx: *StringContext, c: u8) !bool {
     if (ctx.escaped) {
-        try ctx.output.append(c);
+        var cn = switch (c) {
+            'b' => 0x08,
+            'f' => 0x0c,
+            't' => '\t',
+            'n' => '\n',
+            'r' => '\r',
+            else => c,
+        };
+        try ctx.output.append(cn);
         ctx.escaped = false;
         return true;
     }
@@ -104,8 +112,22 @@ test "double escape" {
     ctx.alloc.free(str.?);
 }
 
-// TODO: escaping \t \n
+test "simple escape" {
+    var src = parser.Source.init("\"\\b\\t\\r\\n\\fa\"");
+    var ctx = parser.Context{
+        .src = &src,
+        .alloc = testing.allocator,
+    };
+
+    var str = try parse(&ctx);
+    try testing.expect(std.mem.eql(u8, str.?, "\x08\t\r\n\x0ca"));
+    try testing.expect(ctx.src.current() == null);
+    ctx.alloc.free(str.?);
+}
+
+// TODO: All other escape sequences not listed above are reserved; if they are used, TOML should produce an error.
 // TODO: unicode escaping \u0000
 // TODO: multi-line
 // TODO: literal string 'abc'
+// TODO: line ending backslash
 // TODO: multi-line literal string '''aoeu'''
