@@ -2,10 +2,10 @@ const std = @import("std");
 const Source = @import("./Source.zig");
 const testing = std.testing;
 
-pub fn skipAllComments(src: *Source) !void {
+pub fn skip(src: *Source) !void {
     while (true) {
         try src.skipSpacesAndLineBreaks();
-        if (try src.current()) |c| {
+        if (src.current()) |c| {
             if (c != '#') return;
         }
         try gotoNextLine(src);
@@ -32,6 +32,6 @@ test "skip" {
         \\    # comment
         \\  a
     );
-    try skipAllComments(&src);
-    try testing.expect((try src.current()).? == 'a');
+    try skip(&src);
+    try testing.expect(src.current().? == 'a');
 }
