@@ -1,13 +1,14 @@
 const std = @import("std");
 const parser = @import("./parser.zig");
+const spaces = @import("./spaces.zig");
 const testing = std.testing;
 
 fn isBareKeyChar(c: u8) bool {
     return std.ascii.isAlphanumeric(c) or c == '-' or c == '_';
 }
 
-fn parseBareKey(src: *parser.Source) ![]const u8 {
-    return src.takeWhile(isBareKeyChar);
+fn parseBareKey(ctx: *parser.Context) []const u8 {
+    return parser.takeWhile(ctx, isBareKeyChar);
 }
 
 pub const Key = union(enum) {
@@ -18,22 +19,22 @@ pub const Key = union(enum) {
 fn parseDotted(ctx: *parser.Context, first: []const u8) !Key {
     var ar = std.ArrayList([]const u8).init(ctx.alloc);
     try ar.append(first);
-    while (ctx.src.current()) |cur| {
+    while (ctx.current()) |cur| {
         if (cur != '.') break;
 
-        _ = try ctx.src.next();
-        try ctx.src.skipSpaces();
-        var next = try parseBareKey(ctx.src);
+        _ = ctx.next();
+        spaces.skipSpaces(ctx);
+        var next = parseBareKey(ctx);
         try ar.append(next);
-        try ctx.src.skipSpaces();
+        spaces.skipSpaces(ctx);
     }
     return Key{ .dotted = ar.toOwnedSlice() };
 }
 
 pub fn parse(ctx: *parser.Context) !Key {
-    var first = try parseBareKey(ctx.src);
-    try ctx.src.skipSpaces();
-    if (ctx.src.current()) |cur| {
+    var first = parseBareKey(ctx);
+    spaces.skipSpaces(ctx);
+    if (ctx.current()) |cur| {
         if (cur == '.') {
             return parseDotted(ctx, first);
         } else {
@@ -45,28 +46,28 @@ pub fn parse(ctx: *parser.Context) !Key {
 }
 
 test "bare" {
-    var src = parser.Source.init("abc =");
     var ctx = parser.Context{
-        .src = &src,
+        .input = "abc =",
         .alloc = testing.allocator,
     };
 
     var key = try parse(&ctx);
     try testing.expect(std.mem.eql(u8, key.bare, "abc"));
-    try testing.expect(ctx.src.current().? == '=');
+    try testing.expect(ctx.current().? == '=');
 }
 
 test "dotted" {
-    var src = parser.Source.init("aa.bb . cc .dd");
     var ctx = parser.Context{
-        .src = &src,
+        .input = "aa.bb . cc .dd",
         .alloc = testing.allocator,
     };
 
     var key = try parse(&ctx);
     try testing.expect(key.dotted.len == 4);
     try testing.expect(std.mem.eql(u8, key.dotted[1], "bb"));
-    try testing.expect(ctx.src.current() == null);
+    try testing.expect(ctx.current() == null);
 
     ctx.alloc.free(key.dotted);
 }
+
+// TODO: Quoted keys: aa."pp.tt".cc

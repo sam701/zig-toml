@@ -1,37 +1,36 @@
 const std = @import("std");
-const Source = @import("./Source.zig");
+const Context = @import("./parser.zig").Context;
+const spaces = @import("./spaces.zig");
 const testing = std.testing;
 
-pub fn skip(src: *Source) !void {
-    while (true) {
-        try src.skipSpacesAndLineBreaks();
-        if (src.current()) |c| {
-            if (c != '#') return;
-        }
-        try gotoNextLine(src);
+pub fn skip(ctx: *Context) void {
+    while (ctx.input.len > 0) {
+        spaces.skipSpacesAndLineBreaks(ctx);
+        if (ctx.input.len == 0) return;
+        if (ctx.input[0] != '#') return;
+        gotoNextLine(ctx);
     }
 }
 
-fn gotoNextLine(src: *Source) !void {
-    var looking_for_eol = true;
-    while (try src.next()) |n| {
-        if (looking_for_eol) {
-            if (n == '\n') {
-                looking_for_eol = false;
-            }
-        } else {
+fn gotoNextLine(ctx: *Context) void {
+    while (ctx.current()) |c| {
+        _ = ctx.next();
+        if (c == '\n') {
             return;
         }
     }
 }
 
 test "skip" {
-    var src = Source.init(
+    var ctx = Context{
+        .input = 
         \\  # comment # abc  
         \\    
         \\    # comment
         \\  a
-    );
-    try skip(&src);
-    try testing.expect(src.current().? == 'a');
+        ,
+        .alloc = testing.allocator,
+    };
+    skip(&ctx);
+    try testing.expect(ctx.input[0] == 'a');
 }
