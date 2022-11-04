@@ -15,4 +15,6 @@ test "all tests" {
     _ = @import("./comment.zig");
     _ = @import("./string.zig");
     _ = @import("./key.zig");
+    _ = @import("./integer.zig");
+    _ = @import("./value.zig");
 }

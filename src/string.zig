@@ -1,5 +1,6 @@
 const std = @import("std");
-const Context = @import("./parser.zig").Context;
+const parser = @import("./parser.zig");
+const Context = parser.Context;
 const testing = std.testing;
 
 // Returned string is allocated
@@ -27,6 +28,7 @@ const StringContext = struct {
     escaped: bool,
 };
 
+// Returns true if further chars can be consumed.
 fn charTester(ctx: *StringContext, c: u8) !bool {
     if (ctx.escaped) {
         var cn = switch (c) {
@@ -39,29 +41,24 @@ fn charTester(ctx: *StringContext, c: u8) !bool {
         };
         try ctx.output.append(cn);
         ctx.escaped = false;
-        return true;
+    } else {
+        switch (c) {
+            '"' => return false,
+            '\\' => {
+                ctx.escaped = true;
+            },
+            else => {
+                try ctx.output.append(c);
+            },
+        }
     }
-    switch (c) {
-        '"' => return false,
-        '\\' => {
-            ctx.escaped = true;
-            return true;
-        },
-        else => {
-            try ctx.output.append(c);
-            return true;
-        },
-    }
+    return true;
 }
 
 test "simple" {
-    var ctx = Context{
-        .input = 
+    var ctx = parser.testInput(
         \\"abc"=
-        ,
-        .alloc = testing.allocator,
-    };
-
+    );
     var str = try parse(&ctx);
     try testing.expect(std.mem.eql(u8, str.?, "abc"));
     try testing.expect(ctx.current().? == '=');
@@ -69,25 +66,17 @@ test "simple" {
 }
 
 test "empty" {
-    var ctx = Context{
-        .input = 
+    var ctx = parser.testInput(
         \\abc"
-        ,
-        .alloc = testing.allocator,
-    };
-
+    );
     var str = try parse(&ctx);
     try testing.expect(str == null);
 }
 
 test "escape" {
-    var ctx = Context{
-        .input = 
+    var ctx = parser.testInput(
         \\"a\"bc"
-        ,
-        .alloc = testing.allocator,
-    };
-
+    );
     var str = try parse(&ctx);
     try testing.expect(std.mem.eql(u8, str.?, "a\"bc"));
     try testing.expect(ctx.current() == null);
@@ -95,13 +84,9 @@ test "escape" {
 }
 
 test "double escape" {
-    var ctx = Context{
-        .input = 
+    var ctx = parser.testInput(
         \\"a\\"
-        ,
-        .alloc = testing.allocator,
-    };
-
+    );
     var str = try parse(&ctx);
     try testing.expect(std.mem.eql(u8, str.?, "a\\"));
     try testing.expect(ctx.current() == null);
@@ -109,11 +94,7 @@ test "double escape" {
 }
 
 test "simple escape" {
-    var ctx = Context{
-        .input = "\"\\b\\t\\r\\n\\fa\"",
-        .alloc = testing.allocator,
-    };
-
+    var ctx = parser.testInput("\"\\b\\t\\r\\n\\fa\"");
     var str = try parse(&ctx);
     try testing.expect(std.mem.eql(u8, str.?, "\x08\t\r\n\x0ca"));
     try testing.expect(ctx.current() == null);

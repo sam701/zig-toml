@@ -72,25 +72,26 @@ pub fn takeWhile(ctx: *Context, comptime tester: fn (u8) bool) []const u8 {
     return origin[0 .. origin.len - ctx.input.len];
 }
 
+pub fn testInput(input: []const u8) Context {
+    return Context{
+        .input = input,
+        .alloc = testing.allocator,
+    };
+}
+
 fn isA(x: u8) bool {
     return x == 'a';
 }
 
 test "takeWhile 1" {
-    var ctx = Context{
-        .input = "aaabc",
-        .alloc = testing.allocator,
-    };
+    var ctx = testInput("aaabc");
     var a3 = takeWhile(&ctx, isA);
     try testing.expect(std.mem.eql(u8, a3, "aaa"));
     try testing.expect(ctx.current().? == 'b');
 }
 
 test "takeWhile 2" {
-    var ctx = Context{
-        .input = "aaa",
-        .alloc = testing.allocator,
-    };
+    var ctx = testInput("aaa");
     var a3 = takeWhile(&ctx, isA);
     try testing.expect(std.mem.eql(u8, a3, "aaa"));
     try testing.expect(ctx.current() == null);

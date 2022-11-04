@@ -10,10 +10,9 @@ fn contains(c: u8, allowed: []const u8) bool {
 }
 
 fn skipAny(ctx: *Context, chars: []const u8) void {
-    while (ctx.input.len > 0) {
-        var c = ctx.input[0];
+    while (ctx.current()) |c| {
         if (!contains(c, chars)) return;
-        ctx.input = ctx.input[1..];
+        _ = ctx.next();
     }
 }
 
