@@ -16,12 +16,12 @@ pub const Key = union(enum) {
     bare: parser.String,
     dotted: []const parser.String,
 
-    pub fn deinit(self: *Key, ctx: *parser.Context) void {
+    pub fn deinit(self: *Key, alloc: std.mem.Allocator) void {
         switch (self.*) {
-            .bare => |x| x.deinit(ctx),
+            .bare => |x| x.deinit(alloc),
             .dotted => |ar| {
-                for (ar) |x| x.deinit(ctx);
-                ctx.alloc.free(ar);
+                for (ar) |x| x.deinit(alloc);
+                alloc.free(ar);
             },
         }
     }
@@ -69,7 +69,7 @@ test "dotted" {
     try testing.expect(key.dotted.len == 4);
     try testing.expect(std.mem.eql(u8, key.dotted[1].content, "bb"));
     try testing.expect(ctx.current() == null);
-    key.deinit(&ctx);
+    key.deinit(ctx.alloc);
 }
 
 // TODO: Quoted keys: aa."pp.tt".cc

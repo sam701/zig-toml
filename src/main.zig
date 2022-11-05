@@ -1,21 +1,27 @@
 const std = @import("std");
 const testing = std.testing;
 
-export fn add(a: i32, b: i32) i32 {
-    return a + b;
+const parser = @import("./parser.zig");
+const table_content = @import("./table_content.zig");
+
+pub fn parseIntoMap(input: []const u8, alloc: std.mem.Allocator) !table_content.Map {
+    var ctx = parser.Context{
+        .input = input,
+        .alloc = alloc,
+    };
+    return table_content.parseIntoMap(&ctx);
 }
 
-// test "basic add functionality" {
-//     var src = Source.init(" hello ");
-// }
+pub const deinitMap = table_content.deinitMap;
 
-test "all tests" {
-    _ = @import("./parser.zig");
-    _ = @import("./spaces.zig");
-    _ = @import("./comment.zig");
-    _ = @import("./string.zig");
-    _ = @import("./key.zig");
-    _ = @import("./integer.zig");
-    _ = @import("./value.zig");
-    _ = @import("./key_value_pair.zig");
+test "full" {
+    var m = try parseIntoMap(
+        \\  aa = "a1"
+        \\
+        \\    bb = 33
+    , testing.allocator);
+    try testing.expect(m.count() == 2);
+    try testing.expect(std.mem.eql(u8, m.get("aa").?.string, "a1"));
+    try testing.expect(m.get("bb").?.integer == 33);
+    deinitMap(&m);
 }

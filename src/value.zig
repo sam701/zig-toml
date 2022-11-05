@@ -9,9 +9,9 @@ pub const Value = union(enum) {
     string: []const u8,
     integer: i64,
 
-    pub fn deinit(self: Value, ctx: *parser.Context) void {
+    pub fn deinit(self: Value, alloc: std.mem.Allocator) void {
         switch (self) {
-            .string => |str| ctx.alloc.free(str),
+            .string => |str| alloc.free(str),
             else => {},
         }
     }
@@ -32,7 +32,7 @@ test "value string" {
     );
     var val = try parse(&ctx);
     try testing.expect(std.mem.eql(u8, val.string, "abc"));
-    val.deinit(&ctx);
+    val.deinit(ctx.alloc);
 }
 
 test "value integer" {

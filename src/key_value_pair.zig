@@ -10,9 +10,9 @@ pub const KeyValuePair = struct {
     key: key.Key,
     value: value.Value,
 
-    pub fn deinit(self: *KeyValuePair, ctx: *parser.Context) void {
-        self.key.deinit(ctx);
-        self.value.deinit(ctx);
+    pub fn deinit(self: *KeyValuePair, alloc: std.mem.Allocator) void {
+        self.key.deinit(alloc);
+        self.value.deinit(alloc);
     }
 };
 
@@ -35,5 +35,5 @@ test "key value pair" {
     var kv = try parse(&ctx);
     try testing.expect(std.mem.eql(u8, kv.key.bare.content, "abc"));
     try testing.expect(std.mem.eql(u8, kv.value.string, "aa"));
-    kv.deinit(&ctx);
+    kv.deinit(ctx.alloc);
 }

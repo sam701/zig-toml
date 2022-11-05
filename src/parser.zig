@@ -115,17 +115,17 @@ pub const String = struct {
         };
     }
 
-    pub fn deinit(self: String, ctx: *Context) void {
+    pub fn deinit(self: String, alloc: std.mem.Allocator) void {
         if (self.allocated) {
-            ctx.alloc.free(self.content);
+            alloc.free(self.content);
         }
     }
 };
 
 pub fn consumeString(ctx: *Context, str: []const u8) !void {
-  if(std.mem.startsWith(u8, ctx.input, str)){
-    ctx.input = ctx.input[str.len..];
-  }else{
-    return error.UnexpectedToken;
-  }
+    if (std.mem.startsWith(u8, ctx.input, str)) {
+        ctx.input = ctx.input[str.len..];
+    } else {
+        return error.UnexpectedToken;
+    }
 }
