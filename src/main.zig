@@ -17,4 +17,5 @@ test "all tests" {
     _ = @import("./key.zig");
     _ = @import("./integer.zig");
     _ = @import("./value.zig");
+    _ = @import("./key_value_pair.zig");
 }

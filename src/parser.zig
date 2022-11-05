@@ -96,3 +96,36 @@ test "takeWhile 2" {
     try testing.expect(std.mem.eql(u8, a3, "aaa"));
     try testing.expect(ctx.current() == null);
 }
+
+pub const String = struct {
+    content: []const u8,
+    allocated: bool,
+
+    pub fn fromSlice(s: []const u8) String {
+        return String{
+            .content = s,
+            .allocated = false,
+        };
+    }
+
+    pub fn fromList(l: *std.ArrayList(u8)) String {
+        return String{
+            .content = l.toOwnedSlice(),
+            .allocated = true,
+        };
+    }
+
+    pub fn deinit(self: String, ctx: *Context) void {
+        if (self.allocated) {
+            ctx.alloc.free(self.content);
+        }
+    }
+};
+
+pub fn consumeString(ctx: *Context, str: []const u8) !void {
+  if(std.mem.startsWith(u8, ctx.input, str)){
+    ctx.input = ctx.input[str.len..];
+  }else{
+    return error.UnexpectedToken;
+  }
+}

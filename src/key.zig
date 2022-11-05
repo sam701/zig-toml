@@ -7,17 +7,28 @@ fn isBareKeyChar(c: u8) bool {
     return std.ascii.isAlphanumeric(c) or c == '-' or c == '_';
 }
 
-fn parseBareKey(ctx: *parser.Context) []const u8 {
-    return parser.takeWhile(ctx, isBareKeyChar);
+fn parseBareKey(ctx: *parser.Context) parser.String {
+    var v = parser.takeWhile(ctx, isBareKeyChar);
+    return parser.String.fromSlice(v);
 }
 
 pub const Key = union(enum) {
-    bare: []const u8,
-    dotted: []const []const u8,
+    bare: parser.String,
+    dotted: []const parser.String,
+
+    pub fn deinit(self: *Key, ctx: *parser.Context) void {
+        switch (self.*) {
+            .bare => |x| x.deinit(ctx),
+            .dotted => |ar| {
+                for (ar) |x| x.deinit(ctx);
+                ctx.alloc.free(ar);
+            },
+        }
+    }
 };
 
-fn parseDotted(ctx: *parser.Context, first: []const u8) !Key {
-    var ar = std.ArrayList([]const u8).init(ctx.alloc);
+fn parseDotted(ctx: *parser.Context, first: parser.String) !Key {
+    var ar = std.ArrayList(parser.String).init(ctx.alloc);
     try ar.append(first);
     while (ctx.current()) |cur| {
         if (cur != '.') break;
@@ -46,28 +57,19 @@ pub fn parse(ctx: *parser.Context) !Key {
 }
 
 test "bare" {
-    var ctx = parser.Context{
-        .input = "abc =",
-        .alloc = testing.allocator,
-    };
-
+    var ctx = parser.testInput("abc =");
     var key = try parse(&ctx);
-    try testing.expect(std.mem.eql(u8, key.bare, "abc"));
+    try testing.expect(std.mem.eql(u8, key.bare.content, "abc"));
     try testing.expect(ctx.current().? == '=');
 }
 
 test "dotted" {
-    var ctx = parser.Context{
-        .input = "aa.bb . cc .dd",
-        .alloc = testing.allocator,
-    };
-
+    var ctx = parser.testInput("aa.bb . cc .dd");
     var key = try parse(&ctx);
     try testing.expect(key.dotted.len == 4);
-    try testing.expect(std.mem.eql(u8, key.dotted[1], "bb"));
+    try testing.expect(std.mem.eql(u8, key.dotted[1].content, "bb"));
     try testing.expect(ctx.current() == null);
-
-    ctx.alloc.free(key.dotted);
+    key.deinit(&ctx);
 }
 
 // TODO: Quoted keys: aa."pp.tt".cc
