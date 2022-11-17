@@ -51,4 +51,54 @@ test "map" {
     deinitMap(&m);
 }
 
+pub fn parseIntoType(ctx: *parser.Context, comptime T: type, dest: *T) !void {
+    const gen = struct {
+        fn handler(_: *parser.Context, dest2: *T, pair: *kv.KeyValuePair) !void {
+            switch (@typeInfo(T)) {
+                .Struct => |info| {
+                    inline for (info.fields) |field_info| {
+                        if (std.mem.eql(u8, field_info.name, pair.key.bare.content)) {
+                            switch (@typeInfo(field_info.field_type)) {
+                                .Int => {
+                                    @field(dest2.*, field_info.name) = pair.value.integer;
+                                },
+                                .Pointer => |array_info| {
+                                    if (array_info.child == u8) {
+                                        @field(dest2.*, field_info.name) = pair.value.string;
+                                    } else {
+                                        return error.Unimplemented;
+                                    }
+                                },
+                                else => return error.Unimplemented,
+                            }
+                        }
+                    }
+                },
+                else => return error.Unimplemented,
+            }
+        }
+    };
+
+    try parse(*T, ctx, dest, gen.handler);
+}
+
+test "parse into type" {
+    const Aa = struct {
+        aa: i64,
+        bb: []const u8,
+    };
+
+    var ctx = parser.testInput(
+        \\aa = 34
+        \\bb = "abc"
+    );
+    var aa: Aa = undefined;
+    try parseIntoType(&ctx, Aa, &aa);
+
+    try testing.expect(aa.aa == 34);
+    try testing.expect(std.mem.eql(u8, aa.bb, "abc"));
+
+    ctx.alloc.free(aa.bb);
+}
+
 // TODO: handle dotted keys
