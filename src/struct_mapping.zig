@@ -3,7 +3,7 @@ const parser = @import("./parser.zig");
 const testing = std.testing;
 
 const Value = @import("./value.zig").Value;
-const Table = @import("./value.zig").Table;
+const Table = @import("./table.zig").Table;
 
 pub const Context = struct {
     alloc: std.mem.Allocator,

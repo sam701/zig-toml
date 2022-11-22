@@ -4,8 +4,9 @@ const testing = std.testing;
 
 const kv = @import("./key_value_pair.zig");
 const Value = @import("./value.zig").Value;
-const Table = @import("./value.zig").Table;
 const spaces = @import("./spaces.zig");
+
+pub const Table = std.StringHashMap(Value);
 
 fn setValue(ctx: *parser.Context, table: *Table, key: parser.String, value: Value) !void {
     var copiedKey = try ctx.alloc.alloc(u8, key.content.len);
@@ -47,7 +48,7 @@ fn handleKeyPair(ctx: *parser.Context, table: *Table, pair: *kv.KeyValuePair) !v
     }
 }
 
-pub fn parse(ctx: *parser.Context) !Table {
+pub fn parseTableContent(ctx: *parser.Context) !Table {
     var table = Table.init(ctx.alloc);
 
     spaces.skipSpacesAndLineBreaks(ctx);
@@ -95,7 +96,7 @@ test "map" {
         \\
         \\    bb = 33
     );
-    var m = try parse(&ctx);
+    var m = try parseTableContent(&ctx);
     try testing.expect(m.count() == 2);
     try testing.expect(std.mem.eql(u8, m.get("aa").?.string, "a1"));
     try testing.expect(m.get("bb").?.integer == 33);

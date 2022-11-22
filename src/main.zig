@@ -2,16 +2,16 @@ const std = @import("std");
 const testing = std.testing;
 
 const parser = @import("./parser.zig");
-const table_content = @import("./table_content.zig");
+const table = @import("./table.zig");
+pub const Table = table.Table;
 const struct_mapping = @import("./struct_mapping.zig");
-pub const Table = @import("./value.zig").Table;
 
 pub fn parseIntoTable(input: []const u8, alloc: std.mem.Allocator) !Table {
     var ctx = parser.Context{
         .input = input,
         .alloc = alloc,
     };
-    return table_content.parse(&ctx);
+    return table.parseTableContent(&ctx);
 }
 
 pub fn parseIntoStruct(input: []const u8, ctx: *struct_mapping.Context, comptime T: type, dest: *T) !void {
@@ -19,7 +19,7 @@ pub fn parseIntoStruct(input: []const u8, ctx: *struct_mapping.Context, comptime
     try struct_mapping.intoStruct(ctx, T, dest, &map);
 }
 
-pub const deinitTable = table_content.deinitTable;
+pub const deinitTable = table.deinitTable;
 
 test "full" {
     var m = try parseIntoTable(
@@ -88,6 +88,6 @@ test "deinit table" {
     var content = try file.readToEndAlloc(testing.allocator, 1024 * 1024 * 1024);
     defer testing.allocator.free(content);
 
-    var table = try parseIntoTable(content, testing.allocator);
-    deinitTable(&table);
+    var tab = try parseIntoTable(content, testing.allocator);
+    deinitTable(&tab);
 }
