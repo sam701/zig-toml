@@ -42,18 +42,20 @@ test "parse into struct" {
 
     var ctx = struct_mapping.Context.init(testing.allocator);
     var aa: Aa = undefined;
-    try parseIntoStruct(
-        \\aa = 34
-        \\ bb = "abc"
-        \\  cc = [3, 15]
-        \\dd = ["aa", "bb"]
-    , &ctx, Aa, &aa);
+
+    const file = try std.fs.cwd().openFile("./test/doc1.toml.txt", .{});
+    defer file.close();
+    var content = try file.readToEndAlloc(testing.allocator, 1024 * 1024 * 1024);
+    defer testing.allocator.free(content);
+
+    try parseIntoStruct(content, &ctx, Aa, &aa);
 
     try testing.expect(aa.aa == 34);
     try testing.expect(std.mem.eql(u8, aa.bb, "abc"));
-    try testing.expect(aa.cc.len == 2);
+    try testing.expect(aa.cc.len == 3);
     try testing.expect(aa.cc[0] == 3);
     try testing.expect(aa.cc[1] == 15);
+    try testing.expect(aa.cc[2] == 20);
 
     try testing.expect(aa.dd.len == 2);
     try testing.expect(std.mem.eql(u8, aa.dd[0], "aa"));
