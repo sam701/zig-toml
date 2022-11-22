@@ -67,11 +67,12 @@ fn setValue(ctx: *Context, comptime T: type, dest: *T, value: *Value) !void {
                 else => {
                     switch (value.*) {
                         .array => |ar| {
-                            dest.* = try ctx.alloc.alloc(tinfo.child, ar.len);
+                            var dest_ar = try ctx.alloc.alloc(tinfo.child, ar.len);
                             for (ar) |_, ix| {
-                                try setValue(ctx, tinfo.child, &(dest.*[ix]), &ar[ix]);
+                                try setValue(ctx, tinfo.child, &dest_ar[ix], &ar[ix]);
                                 // TODO: set path
                             }
+                            dest.* = dest_ar;
                             ctx.alloc.free(ar);
                         },
                         else => return error.InvalidValueType,

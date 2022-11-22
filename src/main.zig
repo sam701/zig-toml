@@ -37,7 +37,7 @@ test "parse into struct" {
         aa: i64,
         bb: []const u8,
         cc: []i64,
-        dd: [][]const u8,
+        dd: []const []const u8,
     };
 
     var ctx = struct_mapping.Context.init(testing.allocator);
