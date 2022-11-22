@@ -6,10 +6,13 @@ const string = @import("./string.zig");
 const integer = @import("./integer.zig");
 const array = @import("./array.zig");
 
+pub const Table = std.StringHashMap(Value);
+
 pub const Value = union(enum) {
     string: []const u8,
     integer: i64,
     array: []Value,
+    table: *Table,
 
     pub fn deinit(self: Value, alloc: std.mem.Allocator) void {
         switch (self) {
@@ -19,6 +22,15 @@ pub const Value = union(enum) {
                     element.deinit(alloc);
                 }
                 alloc.free(ar);
+            },
+            .table => |table| {
+                var it = table.iterator();
+                while (it.next()) |entry| {
+                    alloc.free(entry.key_ptr.*);
+                    entry.value_ptr.deinit(alloc);
+                }
+                table.deinit();
+                alloc.destroy(table);
             },
             else => {},
         }

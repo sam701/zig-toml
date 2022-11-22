@@ -3,39 +3,70 @@ const parser = @import("./parser.zig");
 const testing = std.testing;
 
 const kv = @import("./key_value_pair.zig");
-const value = @import("./value.zig");
+const Value = @import("./value.zig").Value;
+const Table = @import("./value.zig").Table;
 const spaces = @import("./spaces.zig");
 
-fn parse(comptime HandlerContext: type, ctx: *parser.Context, handler_context: HandlerContext, comptime handler: fn (*parser.Context, HandlerContext, kv: *kv.KeyValuePair) anyerror!void) !void {
+fn setValue(ctx: *parser.Context, table: *Table, key: parser.String, value: Value) !void {
+    var copiedKey = try ctx.alloc.alloc(u8, key.content.len);
+    std.mem.copy(u8, copiedKey, key.content);
+    try table.put(copiedKey, value);
+    key.deinit(ctx.alloc);
+}
+
+fn handleKeyPair(ctx: *parser.Context, table: *Table, pair: *kv.KeyValuePair) !void {
+    switch (pair.key) {
+        .bare => |key| {
+            try setValue(ctx, table, key, pair.value);
+        },
+        .dotted => |ar| {
+            var current_table: *Table = table;
+            for (ar) |key, ix| {
+                if (ix == ar.len - 1) {
+                    try setValue(ctx, current_table, key, pair.value);
+                } else {
+                    if (current_table.get(key.content)) |val| {
+                        switch (val) {
+                            .table => |tab| {
+                                current_table = tab;
+                            },
+                            else => return error.FieldTypeRedifinition,
+                        }
+                    } else {
+                        var new_table = try ctx.alloc.create(Table);
+                        new_table.* = Table.init(ctx.alloc);
+
+                        var new_value = Value{ .table = new_table };
+                        try setValue(ctx, current_table, key, new_value);
+                        current_table = new_table;
+                    }
+                }
+            }
+            ctx.alloc.free(ar);
+        },
+    }
+}
+
+pub fn parse(ctx: *parser.Context) !Table {
+    var table = Table.init(ctx.alloc);
+
     spaces.skipSpacesAndLineBreaks(ctx);
     while (ctx.current() != null) {
         var pair = try kv.parse(ctx);
-        try handler(ctx, handler_context, &pair);
+        try handleKeyPair(ctx, &table, &pair);
         spaces.skipSpacesAndLineBreaks(ctx);
     }
+
+    return table;
 }
 
-pub const Map = std.StringHashMap(value.Value);
-
-fn kvIntoMapHandler(ctx: *parser.Context, map: *Map, pair: *kv.KeyValuePair) !void {
-    var copiedKey = try ctx.alloc.alloc(u8, pair.key.bare.content.len);
-    std.mem.copy(u8, copiedKey, pair.key.bare.content);
-    try map.put(copiedKey, pair.value);
-    pair.key.deinit(ctx.alloc);
-}
-pub fn parseIntoMap(ctx: *parser.Context) !Map {
-    var map = Map.init(ctx.alloc);
-    try parse(*Map, ctx, &map, kvIntoMapHandler);
-    return map;
-}
-
-pub fn deinitMap(map: *Map) void {
-    var it = map.iterator();
+pub fn deinitTable(table: *Table) void {
+    var it = table.iterator();
     while (it.next()) |entry| {
-        map.allocator.free(entry.key_ptr.*);
-        entry.value_ptr.deinit(map.allocator);
+        table.allocator.free(entry.key_ptr.*);
+        entry.value_ptr.deinit(table.allocator);
     }
-    map.deinit();
+    table.deinit();
 }
 
 test "map" {
@@ -44,61 +75,9 @@ test "map" {
         \\
         \\    bb = 33
     );
-    var m = try parseIntoMap(&ctx);
+    var m = try parse(&ctx);
     try testing.expect(m.count() == 2);
     try testing.expect(std.mem.eql(u8, m.get("aa").?.string, "a1"));
     try testing.expect(m.get("bb").?.integer == 33);
-    deinitMap(&m);
+    deinitTable(&m);
 }
-
-pub fn parseIntoType(ctx: *parser.Context, comptime T: type, dest: *T) !void {
-    const gen = struct {
-        fn handler(_: *parser.Context, dest2: *T, pair: *kv.KeyValuePair) !void {
-            switch (@typeInfo(T)) {
-                .Struct => |info| {
-                    inline for (info.fields) |field_info| {
-                        if (std.mem.eql(u8, field_info.name, pair.key.bare.content)) {
-                            switch (@typeInfo(field_info.field_type)) {
-                                .Int => {
-                                    @field(dest2.*, field_info.name) = pair.value.integer;
-                                },
-                                .Pointer => |array_info| {
-                                    if (array_info.child == u8) {
-                                        @field(dest2.*, field_info.name) = pair.value.string;
-                                    } else {
-                                        return error.Unimplemented;
-                                    }
-                                },
-                                else => return error.Unimplemented,
-                            }
-                        }
-                    }
-                },
-                else => return error.Unimplemented,
-            }
-        }
-    };
-
-    try parse(*T, ctx, dest, gen.handler);
-}
-
-test "parse into type" {
-    const Aa = struct {
-        aa: i64,
-        bb: []const u8,
-    };
-
-    var ctx = parser.testInput(
-        \\aa = 34
-        \\bb = "abc"
-    );
-    var aa: Aa = undefined;
-    try parseIntoType(&ctx, Aa, &aa);
-
-    try testing.expect(aa.aa == 34);
-    try testing.expect(std.mem.eql(u8, aa.bb, "abc"));
-
-    ctx.alloc.free(aa.bb);
-}
-
-// TODO: handle dotted keys

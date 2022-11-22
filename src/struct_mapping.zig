@@ -2,8 +2,8 @@ const std = @import("std");
 const parser = @import("./parser.zig");
 const testing = std.testing;
 
-const Map = @import("./table_content.zig").Map;
 const Value = @import("./value.zig").Value;
+const Table = @import("./value.zig").Table;
 
 pub const Context = struct {
     alloc: std.mem.Allocator,
@@ -21,12 +21,12 @@ pub const Context = struct {
     }
 };
 
-pub fn intoStruct(ctx: *Context, comptime T: type, dest: *T, map: *Map) !void {
+pub fn intoStruct(ctx: *Context, comptime T: type, dest: *T, table: *Table) !void {
     switch (@typeInfo(T)) {
         .Struct => |info| {
             inline for (info.fields) |field_info| {
                 try ctx.field_path.append(field_info.name);
-                if (map.getPtr(field_info.name)) |val| {
+                if (table.getPtr(field_info.name)) |val| {
                     try setValue(ctx, field_info.field_type, &@field(dest.*, field_info.name), val);
                 } else {
                     // TODO: support optional
@@ -34,9 +34,9 @@ pub fn intoStruct(ctx: *Context, comptime T: type, dest: *T, map: *Map) !void {
                 }
                 _ = ctx.field_path.pop();
             }
-            var it = map.keyIterator();
+            var it = table.keyIterator();
             while (it.next()) |key| ctx.alloc.free(key.*);
-            map.deinit();
+            table.deinit();
         },
         else => return error.Unimplemented,
     }
@@ -78,6 +78,15 @@ fn setValue(ctx: *Context, comptime T: type, dest: *T, value: *Value) !void {
                         else => return error.InvalidValueType,
                     }
                 },
+            }
+        },
+        .Struct => {
+            switch (value.*) {
+                .table => |tab| {
+                    try intoStruct(ctx, T, dest, tab);
+                    ctx.alloc.destroy(tab);
+                },
+                else => return error.InvalidValueType,
             }
         },
         else => return error.NotSupportedFieldType,
