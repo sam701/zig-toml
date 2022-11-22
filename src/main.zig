@@ -44,6 +44,7 @@ test "parse into struct" {
         cc: []i64,
         dd: []const []const u8,
         t1: Tt,
+        t2: Tt,
     };
 
     var ctx = struct_mapping.Context.init(testing.allocator);
@@ -69,6 +70,8 @@ test "parse into struct" {
 
     try testing.expect(aa.t1.aa == 3);
     try testing.expect(aa.t1.bb == 4);
+    try testing.expect(aa.t2.aa == 5);
+    try testing.expect(aa.t2.bb == 6);
 
     ctx.alloc.free(aa.bb);
     ctx.alloc.free(aa.cc);

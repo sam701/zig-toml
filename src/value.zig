@@ -5,6 +5,7 @@ const testing = std.testing;
 const string = @import("./string.zig");
 const integer = @import("./integer.zig");
 const array = @import("./array.zig");
+const parseInlineTable = @import("./table_content.zig").parseInlineTable;
 
 pub const Table = std.StringHashMap(Value);
 
@@ -40,6 +41,8 @@ pub const Value = union(enum) {
 pub fn parse(ctx: *parser.Context) anyerror!Value {
     if (try string.parse(ctx)) |str| {
         return Value{ .string = str };
+    } else if (try parseInlineTable(ctx)) |table| {
+        return Value{ .table = table };
     } else if (try integer.parse(ctx)) |int| {
         return Value{ .integer = int };
     } else if (try array.parse(ctx)) |ar| {
