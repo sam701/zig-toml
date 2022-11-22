@@ -42,23 +42,43 @@ pub fn intoStruct(ctx: *Context, comptime T: type, dest: *T, map: *Map) !void {
     }
 }
 
-fn setValue(_: *Context, comptime T: type, dest: *T, value: *Value) !void {
-    switch (value.*) {
-        .integer => |x| {
-            if (T != i64) return error.InvalidValueType;
-            dest.* = x;
-        },
-        .string => |x| {
-            switch (@typeInfo(T)) {
-                .Pointer => |pinfo| {
-                    if (pinfo.child != u8) return error.InvalidValueType;
+fn setValue(ctx: *Context, comptime T: type, dest: *T, value: *Value) !void {
+    switch (@typeInfo(T)) {
+        .Int => {
+            switch (value.*) {
+                .integer => |x| {
                     dest.* = x;
+                    // TODO: support different integer sizes
                 },
                 else => return error.InvalidValueType,
             }
         },
-        .array => |ar| {
-            // todo
+        .Pointer => |tinfo| {
+            if (tinfo.size != .Slice) return error.NotSupportedFieldType;
+            switch (tinfo.child) {
+                u8 => {
+                    switch (value.*) {
+                        .string => |x| {
+                            dest.* = x;
+                        },
+                        else => return error.InvalidValueType,
+                    }
+                },
+                else => {
+                    switch (value.*) {
+                        .array => |ar| {
+                            dest.* = try ctx.alloc.alloc(tinfo.child, ar.len);
+                            for (ar) |_, ix| {
+                                try setValue(ctx, tinfo.child, &(dest.*[ix]), &ar[ix]);
+                                // TODO: set path
+                            }
+                            ctx.alloc.free(ar);
+                        },
+                        else => return error.InvalidValueType,
+                    }
+                },
+            }
         },
+        else => return error.NotSupportedFieldType,
     }
 }

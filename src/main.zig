@@ -36,7 +36,8 @@ test "parse into struct" {
     const Aa = struct {
         aa: i64,
         bb: []const u8,
-        cc: i64,
+        cc: []i64,
+        dd: [][]const u8,
     };
 
     var ctx = struct_mapping.Context.init(testing.allocator);
@@ -44,13 +45,25 @@ test "parse into struct" {
     try parseIntoStruct(
         \\aa = 34
         \\ bb = "abc"
-        \\  cc = 12
+        \\  cc = [3, 15]
+        \\dd = ["aa", "bb"]
     , &ctx, Aa, &aa);
 
     try testing.expect(aa.aa == 34);
     try testing.expect(std.mem.eql(u8, aa.bb, "abc"));
-    try testing.expect(aa.cc == 12);
+    try testing.expect(aa.cc.len == 2);
+    try testing.expect(aa.cc[0] == 3);
+    try testing.expect(aa.cc[1] == 15);
+
+    try testing.expect(aa.dd.len == 2);
+    try testing.expect(std.mem.eql(u8, aa.dd[0], "aa"));
+    try testing.expect(std.mem.eql(u8, aa.dd[1], "bb"));
+
     ctx.alloc.free(aa.bb);
+    ctx.alloc.free(aa.cc);
+    ctx.alloc.free(aa.dd[0]);
+    ctx.alloc.free(aa.dd[1]);
+    ctx.alloc.free(aa.dd);
 
     ctx.deinit();
 }
