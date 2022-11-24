@@ -11,7 +11,7 @@ pub fn parseIntoTable(input: []const u8, alloc: std.mem.Allocator) !Table {
         .input = input,
         .alloc = alloc,
     };
-    return table.parseTableContent(&ctx);
+    return table.parseRootTable(&ctx);
 }
 
 pub fn parseIntoStruct(input: []const u8, ctx: *struct_mapping.Context, comptime T: type, dest: *T) !void {
@@ -45,6 +45,8 @@ test "parse into struct" {
         dd: []const []const u8,
         t1: Tt,
         t2: Tt,
+        t3: Tt,
+        t4: Tt,
     };
 
     var ctx = struct_mapping.Context.init(testing.allocator);
@@ -72,6 +74,10 @@ test "parse into struct" {
     try testing.expect(aa.t1.bb == 4);
     try testing.expect(aa.t2.aa == 5);
     try testing.expect(aa.t2.bb == 6);
+    try testing.expect(aa.t3.aa == 11);
+    try testing.expect(aa.t3.bb == 15);
+    try testing.expect(aa.t4.aa == 21);
+    try testing.expect(aa.t4.bb == 22);
 
     ctx.alloc.free(aa.bb);
     ctx.alloc.free(aa.cc);

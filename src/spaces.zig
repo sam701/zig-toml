@@ -1,6 +1,7 @@
 const std = @import("std");
 const testing = std.testing;
-const Context = @import("./parser.zig").Context;
+const parser = @import("./parser.zig");
+const Context = parser.Context;
 
 fn contains(c: u8, allowed: []const u8) bool {
     for (allowed) |a| {
@@ -22,6 +23,36 @@ pub fn skipSpaces(ctx: *Context) void {
 
 pub fn skipSpacesAndLineBreaks(ctx: *Context) void {
     skipAny(ctx, " \t\r\n");
+}
+
+pub fn consumeNewLine(ctx: *Context) !void {
+    var cnt: usize = 0;
+    while (ctx.current()) |cur| {
+        switch (cur) {
+            '\r' => {
+                if (cnt > 0) return error.UnexpectedToken;
+                _ = ctx.next();
+                cnt += 1;
+            },
+            '\n' => return,
+            else => return error.UnexpectedToken,
+        }
+    }
+    return error.UnexpectedToken;
+}
+
+test "new line" {
+    var ctx = parser.testInput("\r\n");
+    try consumeNewLine(&ctx);
+
+    ctx = parser.testInput("\n");
+    try consumeNewLine(&ctx);
+
+    ctx = parser.testInput("\r\r");
+    try testing.expectError(error.UnexpectedToken, consumeNewLine(&ctx));
+
+    ctx = parser.testInput("");
+    try testing.expectError(error.UnexpectedToken, consumeNewLine(&ctx));
 }
 
 test "skip spaces" {

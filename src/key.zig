@@ -25,6 +25,16 @@ pub const Key = union(enum) {
             },
         }
     }
+
+    pub fn asChain(self: *const Key, one: *[1]parser.String) []const parser.String {
+        switch (self.*) {
+            .bare => |str| {
+                one[0] = str;
+                return one[0..1];
+            },
+            .dotted => |chain| return chain,
+        }
+    }
 };
 
 fn parseDotted(ctx: *parser.Context, first: parser.String) !Key {
