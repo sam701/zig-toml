@@ -17,35 +17,36 @@ fn setValue(ctx: *parser.Context, table: *Table, key: parser.String, value: Valu
 }
 
 fn handleKeyPair(ctx: *parser.Context, table: *Table, pair: *kv.KeyValuePair) !void {
-    switch (pair.key) {
-        .bare => |key| {
-            try setValue(ctx, table, key, pair.value);
-        },
-        .dotted => |ar| {
-            var current_table: *Table = table;
-            for (ar) |key, ix| {
-                if (ix == ar.len - 1) {
-                    try setValue(ctx, current_table, key, pair.value);
-                } else {
-                    if (current_table.get(key.content)) |val| {
-                        switch (val) {
-                            .table => |tab| {
-                                current_table = tab;
-                            },
-                            else => return error.FieldTypeRedifinition,
-                        }
-                    } else {
-                        var new_table = try ctx.alloc.create(Table);
-                        new_table.* = Table.init(ctx.alloc);
+    var buf: [1]parser.String = undefined;
+    var chain = pair.key.asChain(&buf);
 
-                        var new_value = Value{ .table = new_table };
-                        try setValue(ctx, current_table, key, new_value);
-                        current_table = new_table;
-                    }
-                }
-            }
-            ctx.alloc.free(ar);
-        },
+    var current_table: *Table = table;
+    for (chain) |link, ix| {
+        if (ix == chain.len - 1) {
+            try setValue(ctx, current_table, link, pair.value);
+        } else {
+            current_table = try tableAdvance(ctx, current_table, link);
+        }
+    }
+    if (pair.key == .dotted) {
+        ctx.alloc.free(pair.key.dotted);
+    }
+}
+
+fn tableAdvance(ctx: *parser.Context, table: *Table, key: parser.String) !*Table {
+    if (table.get(key.content)) |val| {
+        switch (val) {
+            .table => |tab| return tab,
+            else => return error.FieldTypeRedifinition,
+        }
+    } else {
+        var new_table = try ctx.alloc.create(Table);
+        new_table.* = Table.init(ctx.alloc);
+
+        var new_value = Value{ .table = new_table };
+        try setValue(ctx, table, key, new_value);
+        key.deinit(ctx.alloc);
+        return new_table;
     }
 }
 
@@ -75,22 +76,7 @@ fn createTable(ctx: *parser.Context, root_table: *Table, key: keypkg.Key) !*Tabl
 
     var current_table = root_table;
     for (chain) |ckey| {
-        if (current_table.get(ckey.content)) |value| {
-            switch (value) {
-                .table => |tab| {
-                    current_table = tab;
-                },
-                else => return error.FieldTypeRedifinition,
-            }
-        } else {
-            var new_table = try ctx.alloc.create(Table);
-            new_table.* = Table.init(ctx.alloc);
-
-            var tab_key = try ctx.alloc.alloc(u8, ckey.content.len);
-            std.mem.copy(u8, tab_key, ckey.content);
-            try current_table.put(tab_key, Value{ .table = new_table });
-            current_table = new_table;
-        }
+        current_table = try tableAdvance(ctx, current_table, ckey);
     }
     return current_table;
 }
