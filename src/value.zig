@@ -8,20 +8,23 @@ const array = @import("./array.zig");
 const tablepkg = @import("./table.zig");
 const Table = tablepkg.Table;
 
+pub const ValueList = std.ArrayList(Value);
+
 pub const Value = union(enum) {
     string: []const u8,
     integer: i64,
-    array: []Value,
+    array: *ValueList,
     table: *Table,
 
     pub fn deinit(self: Value, alloc: std.mem.Allocator) void {
         switch (self) {
             .string => |str| alloc.free(str),
             .array => |ar| {
-                for (ar) |element| {
+                for (ar.items) |element| {
                     element.deinit(alloc);
                 }
-                alloc.free(ar);
+                ar.deinit();
+                alloc.destroy(ar);
             },
             .table => |table| {
                 var it = table.iterator();

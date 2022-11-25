@@ -5,11 +5,12 @@ const testing = std.testing;
 const value = @import("./value.zig");
 const spaces = @import("./spaces.zig");
 
-pub fn parse(ctx: *parser.Context) !?[]value.Value {
+pub fn parse(ctx: *parser.Context) !?*value.ValueList {
     parser.consumeString(ctx, "[") catch return null;
     spaces.skipSpacesAndLineBreaks(ctx);
 
-    var ar = std.ArrayList(value.Value).init(ctx.alloc);
+    var ar = try ctx.alloc.create(value.ValueList);
+    ar.* = value.ValueList.init(ctx.alloc);
     while (true) {
         var val = try value.parse(ctx);
         try ar.append(val);
@@ -20,7 +21,7 @@ pub fn parse(ctx: *parser.Context) !?[]value.Value {
             break;
         } else |_| {}
     }
-    return ar.toOwnedSlice();
+    return ar;
 }
 
 test "array" {
@@ -31,11 +32,11 @@ test "array" {
     );
     var ar = (try parse(&ctx)).?;
 
-    try testing.expect(ar.len == 4);
-    try testing.expect(ar[0].integer == 3);
-    try testing.expect(ar[1].integer == 4);
-    try testing.expect(std.mem.eql(u8, ar[2].string, "aa"));
-    try testing.expect(ar[3].array[0].integer == 5);
+    try testing.expect(ar.items.len == 4);
+    try testing.expect(ar.items[0].integer == 3);
+    try testing.expect(ar.items[1].integer == 4);
+    try testing.expect(std.mem.eql(u8, ar.items[2].string, "aa"));
+    try testing.expect(ar.items[3].array.items[0].integer == 5);
 
     (value.Value{ .array = ar }).deinit(ctx.alloc);
 }
