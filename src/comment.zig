@@ -3,7 +3,7 @@ const Context = @import("./parser.zig").Context;
 const spaces = @import("./spaces.zig");
 const testing = std.testing;
 
-pub fn skip(ctx: *Context) void {
+pub fn skipSpacesAndComments(ctx: *Context) void {
     while (ctx.input.len > 0) {
         spaces.skipSpacesAndLineBreaks(ctx);
         if (ctx.input.len == 0) return;
@@ -31,6 +31,6 @@ test "skip" {
         ,
         .alloc = testing.allocator,
     };
-    skip(&ctx);
+    skipSpacesAndComments(&ctx);
     try testing.expect(ctx.input[0] == 'a');
 }

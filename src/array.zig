@@ -4,19 +4,20 @@ const testing = std.testing;
 
 const value = @import("./value.zig");
 const spaces = @import("./spaces.zig");
+const comment = @import("./comment.zig");
 
 pub fn parse(ctx: *parser.Context) !?*value.ValueList {
     parser.consumeString(ctx, "[") catch return null;
-    spaces.skipSpacesAndLineBreaks(ctx);
+    comment.skipSpacesAndComments(ctx);
 
     var ar = try ctx.alloc.create(value.ValueList);
     ar.* = value.ValueList.init(ctx.alloc);
     while (true) {
         var val = try value.parse(ctx);
         try ar.append(val);
-        spaces.skipSpacesAndLineBreaks(ctx);
+        comment.skipSpacesAndComments(ctx);
         parser.consumeString(ctx, ",") catch {};
-        spaces.skipSpacesAndLineBreaks(ctx);
+        comment.skipSpacesAndComments(ctx);
         if (parser.consumeString(ctx, "]")) |_| {
             break;
         } else |_| {}
@@ -27,7 +28,7 @@ pub fn parse(ctx: *parser.Context) !?*value.ValueList {
 test "array" {
     var ctx = parser.testInput(
         \\[  3, 4 ,  
-        \\"aa",
+        \\"aa", # comment
         \\[5], ]x
     );
     var ar = (try parse(&ctx)).?;

@@ -5,7 +5,9 @@ const testing = std.testing;
 const kv = @import("./key_value_pair.zig");
 const keypkg = @import("./key.zig");
 const Value = @import("./value.zig").Value;
+const ValueList = @import("./value.zig").ValueList;
 const spaces = @import("./spaces.zig");
+const comment = @import("./comment.zig");
 
 pub const Table = std.StringHashMap(Value);
 
@@ -25,28 +27,11 @@ fn handleKeyPair(ctx: *parser.Context, table: *Table, pair: *kv.KeyValuePair) !v
         if (ix == chain.len - 1) {
             try setValue(ctx, current_table, link, pair.value);
         } else {
-            current_table = try tableAdvance(ctx, current_table, link);
+            current_table = try tableAdvance(ctx, current_table, link, LeafType.table);
         }
     }
     if (pair.key == .dotted) {
         ctx.alloc.free(pair.key.dotted);
-    }
-}
-
-fn tableAdvance(ctx: *parser.Context, table: *Table, key: parser.String) !*Table {
-    if (table.get(key.content)) |val| {
-        switch (val) {
-            .table => |tab| return tab,
-            else => return error.FieldTypeRedifinition,
-        }
-    } else {
-        var new_table = try ctx.alloc.create(Table);
-        new_table.* = Table.init(ctx.alloc);
-
-        var new_value = Value{ .table = new_table };
-        try setValue(ctx, table, key, new_value);
-        key.deinit(ctx.alloc);
-        return new_table;
     }
 }
 
@@ -58,35 +43,85 @@ pub fn parseRootTable(ctx: *parser.Context) !Table {
 
 fn parseTableContent(ctx: *parser.Context, root_table: *Table) !void {
     var current_table = root_table;
+    comment.skipSpacesAndComments(ctx);
     while (ctx.current() != null) {
-        spaces.skipSpacesAndLineBreaks(ctx);
-        if (try parseTableHeader(ctx)) |header_key| {
+        if (try parseTableHeader(ctx, &table_array_delimiters)) |header_key| {
             // TODO: set path
-            current_table = try createTable(ctx, root_table, header_key);
+            current_table = try createTable(ctx, root_table, header_key, LeafType.table_array);
+        } else if (try parseTableHeader(ctx, &table_delimiters)) |header_key| {
+            // TODO: set path
+            current_table = try createTable(ctx, root_table, header_key, LeafType.table);
         } else {
             var pair = try kv.parse(ctx);
             try handleKeyPair(ctx, current_table, &pair);
         }
+        comment.skipSpacesAndComments(ctx);
     }
 }
 
-fn createTable(ctx: *parser.Context, root_table: *Table, key: keypkg.Key) !*Table {
+fn createTable(ctx: *parser.Context, root_table: *Table, key: keypkg.Key, leaf: LeafType) !*Table {
     var buf: [1]parser.String = undefined;
     var chain = key.asChain(&buf);
 
     var current_table = root_table;
     for (chain) |ckey| {
-        current_table = try tableAdvance(ctx, current_table, ckey);
+        current_table = try tableAdvance(ctx, current_table, ckey, leaf);
     }
     return current_table;
 }
 
-fn parseTableHeader(ctx: *parser.Context) !?keypkg.Key {
-    parser.consumeString(ctx, "[") catch return null;
+const LeafType = enum(u8) {
+    table,
+    table_array,
+};
+
+fn tableAdvance(ctx: *parser.Context, table: *Table, key: parser.String, leaf: LeafType) !*Table {
+    if (table.get(key.content)) |val| {
+        switch (val) {
+            .table => |tab| return tab,
+            .array => |ar| {
+                switch (ar.items[ar.items.len - 1]) {
+                    .table => |tab| return tab,
+                    else => return error.FieldTypeRedifinition,
+                }
+            },
+            else => return error.FieldTypeRedifinition,
+        }
+    } else {
+        var new_table = try ctx.alloc.create(Table);
+        new_table.* = Table.init(ctx.alloc);
+        var new_value = Value{ .table = new_table };
+
+        switch (leaf) {
+            .table => try setValue(ctx, table, key, new_value),
+            .table_array => {
+                var list = try ctx.alloc.create(ValueList);
+                list.* = ValueList.init(ctx.alloc);
+                try list.append(new_value);
+                var list_value = Value{ .array = list };
+                try setValue(ctx, table, key, list_value);
+            },
+        }
+
+        key.deinit(ctx.alloc);
+        return new_table;
+    }
+}
+
+const Delimiters = struct {
+    start: []const u8,
+    end: []const u8,
+};
+
+const table_delimiters = Delimiters{ .start = "[", .end = "]" };
+const table_array_delimiters = Delimiters{ .start = "[[", .end = "]]" };
+
+fn parseTableHeader(ctx: *parser.Context, delimiters: *const Delimiters) !?keypkg.Key {
+    parser.consumeString(ctx, delimiters.start) catch return null;
     spaces.skipSpaces(ctx);
     var k = try keypkg.parse(ctx);
     spaces.skipSpaces(ctx);
-    try parser.consumeString(ctx, "]");
+    try parser.consumeString(ctx, delimiters.end);
     spaces.skipSpaces(ctx);
     try spaces.consumeNewLine(ctx);
     return k;
@@ -94,7 +129,7 @@ fn parseTableHeader(ctx: *parser.Context) !?keypkg.Key {
 
 test "table header bare" {
     var ctx = parser.testInput("[t1]\n");
-    var k = (try parseTableHeader(&ctx)).?;
+    var k = (try parseTableHeader(&ctx, &table_delimiters)).?;
 
     try testing.expect(std.mem.eql(u8, k.bare.content, "t1"));
     k.deinit(ctx.alloc);
@@ -102,7 +137,7 @@ test "table header bare" {
 
 test "table header dotted" {
     var ctx = parser.testInput("[ aa. bb ]\n");
-    var k = (try parseTableHeader(&ctx)).?;
+    var k = (try parseTableHeader(&ctx, &table_delimiters)).?;
 
     try testing.expect(k.dotted.len == 2);
     try testing.expect(std.mem.eql(u8, k.dotted[0].content, "aa"));
