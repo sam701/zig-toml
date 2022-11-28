@@ -38,6 +38,31 @@ pub const Value = union(enum) {
             else => {},
         }
     }
+
+    pub fn print(self: *const Value) void {
+        switch (self.*) {
+            .string => |x| std.debug.print("\"{s}\"", .{x}),
+            .integer => |x| std.debug.print("{}", .{x}),
+            .array => |ar| {
+                std.debug.print("[", .{});
+                for (ar.items) |x| {
+                    x.print();
+                    std.debug.print(",", .{});
+                }
+                std.debug.print("]", .{});
+            },
+            .table => |tab| {
+                std.debug.print("{{", .{});
+                var it = tab.iterator();
+                while (it.next()) |x| {
+                    std.debug.print("{s}:", .{x.key_ptr.*});
+                    x.value_ptr.print();
+                    std.debug.print(",", .{});
+                }
+                std.debug.print("}}", .{});
+            },
+        }
+    }
 };
 
 pub fn parse(ctx: *parser.Context) anyerror!Value {

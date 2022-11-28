@@ -16,7 +16,7 @@ pub const Key = union(enum) {
     bare: parser.String,
     dotted: []const parser.String,
 
-    pub fn deinit(self: *Key, alloc: std.mem.Allocator) void {
+    pub fn deinit(self: *const Key, alloc: std.mem.Allocator) void {
         switch (self.*) {
             .bare => |x| x.deinit(alloc),
             .dotted => |ar| {

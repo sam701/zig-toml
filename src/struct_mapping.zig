@@ -26,23 +26,27 @@ pub fn intoStruct(ctx: *Context, comptime T: type, dest: *T, table: *Table) !voi
         .Struct => |info| {
             inline for (info.fields) |field_info| {
                 try ctx.field_path.append(field_info.name);
-                if (table.getPtr(field_info.name)) |val| {
-                    try setValue(ctx, field_info.field_type, &@field(dest.*, field_info.name), val);
+                if (table.fetchRemove(field_info.name)) |entry| {
+                    try setValue(ctx, field_info.field_type, &@field(dest.*, field_info.name), &entry.value);
+                    ctx.alloc.free(entry.key);
                 } else {
                     // TODO: support optional
                     return error.MissingRequiredField;
                 }
                 _ = ctx.field_path.pop();
             }
-            var it = table.keyIterator();
-            while (it.next()) |key| ctx.alloc.free(key.*);
+            var it = table.iterator();
+            while (it.next()) |entry| {
+                ctx.alloc.free(entry.key_ptr.*);
+                entry.value_ptr.deinit(ctx.alloc);
+            }
             table.deinit();
         },
         else => return error.Unimplemented,
     }
 }
 
-fn setValue(ctx: *Context, comptime T: type, dest: *T, value: *Value) !void {
+fn setValue(ctx: *Context, comptime T: type, dest: *T, value: *const Value) !void {
     switch (@typeInfo(T)) {
         .Int => {
             switch (value.*) {

@@ -27,7 +27,7 @@ fn handleKeyPair(ctx: *parser.Context, table: *Table, pair: *kv.KeyValuePair) !v
         if (ix == chain.len - 1) {
             try setValue(ctx, current_table, link, pair.value);
         } else {
-            current_table = try tableAdvance(ctx, current_table, link, LeafType.table);
+            current_table = try tableAdvance(ctx, current_table, link, false);
         }
     }
     if (pair.key == .dotted) {
@@ -64,9 +64,11 @@ fn createTable(ctx: *parser.Context, root_table: *Table, key: keypkg.Key, leaf: 
     var chain = key.asChain(&buf);
 
     var current_table = root_table;
-    for (chain) |ckey| {
-        current_table = try tableAdvance(ctx, current_table, ckey, leaf);
+    for (chain) |ckey, ix| {
+        var new_array_item = ix == chain.len - 1 and leaf == LeafType.table_array;
+        current_table = try tableAdvance(ctx, current_table, ckey, new_array_item);
     }
+    key.deinit(ctx.alloc);
     return current_table;
 }
 
@@ -75,14 +77,22 @@ const LeafType = enum(u8) {
     table_array,
 };
 
-fn tableAdvance(ctx: *parser.Context, table: *Table, key: parser.String, leaf: LeafType) !*Table {
+fn tableAdvance(ctx: *parser.Context, table: *Table, key: parser.String, new_array_item: bool) !*Table {
     if (table.get(key.content)) |val| {
         switch (val) {
             .table => |tab| return tab,
             .array => |ar| {
-                switch (ar.items[ar.items.len - 1]) {
-                    .table => |tab| return tab,
-                    else => return error.FieldTypeRedifinition,
+                if (new_array_item) {
+                    var new_table = try ctx.alloc.create(Table);
+                    new_table.* = Table.init(ctx.alloc);
+                    var new_value = Value{ .table = new_table };
+                    try ar.append(new_value);
+                    return new_table;
+                } else {
+                    switch (ar.items[ar.items.len - 1]) {
+                        .table => |tab| return tab,
+                        else => return error.FieldTypeRedifinition,
+                    }
                 }
             },
             else => return error.FieldTypeRedifinition,
@@ -92,16 +102,13 @@ fn tableAdvance(ctx: *parser.Context, table: *Table, key: parser.String, leaf: L
         new_table.* = Table.init(ctx.alloc);
         var new_value = Value{ .table = new_table };
 
-        switch (leaf) {
-            .table => try setValue(ctx, table, key, new_value),
-            .table_array => {
-                var list = try ctx.alloc.create(ValueList);
-                list.* = ValueList.init(ctx.alloc);
-                try list.append(new_value);
-                var list_value = Value{ .array = list };
-                try setValue(ctx, table, key, list_value);
-            },
+        if (new_array_item) {
+            var list = try ctx.alloc.create(ValueList);
+            list.* = ValueList.init(ctx.alloc);
+            try list.append(new_value);
+            new_value = Value{ .array = list };
         }
+        try setValue(ctx, table, key, new_value);
 
         key.deinit(ctx.alloc);
         return new_table;
