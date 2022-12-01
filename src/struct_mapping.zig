@@ -57,6 +57,14 @@ fn setValue(ctx: *Context, comptime T: type, dest: *T, value: *const Value) !voi
                 else => return error.InvalidValueType,
             }
         },
+        .Bool => {
+            switch (value.*) {
+                .boolean => |b| {
+                    dest.* = b;
+                },
+                else => return error.InvalidValueType,
+            }
+        },
         .Pointer => |tinfo| {
             if (tinfo.size != .Slice) return error.NotSupportedFieldType;
             switch (tinfo.child) {

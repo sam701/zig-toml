@@ -31,3 +31,5 @@ test "int" {
 
 // TODO: underscores in ints
 // TODO: hex numbers
+// TODO: octal numbers
+// TODO: binary numbers

@@ -13,6 +13,7 @@ pub const ValueList = std.ArrayList(Value);
 pub const Value = union(enum) {
     string: []const u8,
     integer: i64,
+    boolean: bool,
     array: *ValueList,
     table: *Table,
 
@@ -70,12 +71,24 @@ pub fn parse(ctx: *parser.Context) anyerror!Value {
         return Value{ .string = str };
     } else if (try tablepkg.parseInlineTable(ctx)) |table| {
         return Value{ .table = table };
+    } else if (parseBool(ctx)) |b| {
+        return Value{ .boolean = b };
     } else if (try integer.parse(ctx)) |int| {
         return Value{ .integer = int };
     } else if (try array.parse(ctx)) |ar| {
         return Value{ .array = ar };
     }
     return error.CannotParseValue;
+}
+
+fn parseBool(ctx: *parser.Context) ?bool {
+    if (parser.consumeString(ctx, "true")) {
+        return true;
+    } else |_| if (parser.consumeString(ctx, "false")) {
+        return false;
+    } else |_| {
+        return null;
+    }
 }
 
 test "value string" {
@@ -94,3 +107,22 @@ test "value integer" {
     var val = try parse(&ctx);
     try testing.expect(val.integer == 123);
 }
+
+test "bool" {
+    var ctx = parser.testInput("123");
+    try testing.expect(parseBool(&ctx) == null);
+
+    ctx = parser.testInput("true");
+    try testing.expect(parseBool(&ctx).? == true);
+
+    ctx = parser.testInput("false");
+    try testing.expect(parseBool(&ctx).? == false);
+
+    ctx = parser.testInput("true");
+    var val = try parse(&ctx);
+    try testing.expect(val.boolean == true);
+}
+
+// TODO: floats
+// TODO: date
+// TODO: date time

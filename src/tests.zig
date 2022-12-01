@@ -32,6 +32,7 @@ test "parse into struct" {
     const Aa = struct {
         aa: i64,
         bb: []const u8,
+        b1: bool,
         cc: []i64,
         dd: []const []const u8,
         t1: Tt,
@@ -53,6 +54,7 @@ test "parse into struct" {
 
     try testing.expect(aa.aa == 34);
     try testing.expect(std.mem.eql(u8, aa.bb, "abcЖ"));
+    try testing.expect(aa.b1 == true);
     try testing.expect(aa.cc.len == 3);
     try testing.expect(aa.cc[0] == 3);
     try testing.expect(aa.cc[1] == 15);
