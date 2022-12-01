@@ -35,24 +35,52 @@ const StringContext = struct {
     escaped: bool = false,
     single_quote: bool,
     single_line: bool,
+    remaining_unicode_chars: u5 = 0,
+    unicode_code_point: u21 = 0,
 };
 
 // Returns true if further chars can be consumed.
 fn charTester(ctx: *StringContext, c: u8) !bool {
     if (ctx.single_line) {
-        if(c == '\r' or c == '\n') return error.InvalidCharacter;
+        if (c == '\r' or c == '\n') return error.InvalidCharacter;
+    }
+    if (ctx.remaining_unicode_chars > 0) {
+        if (ctx.remaining_unicode_chars > 6) {
+            if (c != '0') return error.InvalidUnicodeCode;
+        } else {
+            var digit: u21 = try std.fmt.charToDigit(c, 16);
+            ctx.unicode_code_point += digit << (4 * (ctx.remaining_unicode_chars - 1));
+        }
+
+        ctx.remaining_unicode_chars -= 1;
+
+        if (ctx.remaining_unicode_chars == 0) {
+            var buf: [4]u8 = undefined;
+            var len = try std.unicode.utf8Encode(ctx.unicode_code_point, buf[0..]);
+            try ctx.output.appendSlice(buf[0..len]);
+        }
+        return true;
     }
     if (ctx.escaped) {
-        var cn = switch (c) {
-            'b' => 0x08,
-            'f' => 0x0c,
-            't' => '\t',
-            'n' => '\n',
-            'r' => '\r',
-            else => c,
-        };
-        try ctx.output.append(cn);
         ctx.escaped = false;
+        ctx.remaining_unicode_chars = switch (c) {
+            'u' => 4,
+            'U' => 8,
+            else => 0,
+        };
+        if (ctx.remaining_unicode_chars == 0) {
+            var cn = switch (c) {
+                'b' => 0x08,
+                'f' => 0x0c,
+                't' => '\t',
+                'n' => '\n',
+                'r' => '\r',
+                else => c,
+            };
+            try ctx.output.append(cn);
+        } else {
+            ctx.unicode_code_point = 0;
+        }
     } else {
         if (ctx.single_quote) {
             if (c == '\'') return false;
@@ -100,6 +128,25 @@ test "simple" {
     ctx.alloc.free(str.?);
 }
 
+test "unicode 4" {
+    var ctx = parser.testInput("\"b\\u00E4c\"");
+    var str = try parse(&ctx);
+    try testing.expect(std.mem.eql(u8, str.?, "bäc"));
+    ctx.alloc.free(str.?);
+}
+
+test "unicode 8" {
+    var ctx = parser.testInput("\"b\\U0001F642c\"");
+    var str = try parse(&ctx);
+    try testing.expect(std.mem.eql(u8, str.?, "b\u{1f642}c"));
+    ctx.alloc.free(str.?);
+}
+
+test "invalid unicode 1" {
+    var ctx = parser.testInput("\"b\\U0101F642c\"");
+    try testing.expectError(error.InvalidUnicodeCode, parse(&ctx));
+}
+
 test "empty" {
     var ctx = parser.testInput(
         \\abc"
@@ -137,7 +184,6 @@ test "simple escape" {
 }
 
 // TODO: All other escape sequences not listed above are reserved; if they are used, TOML should produce an error.
-// TODO: unicode escaping \u0000
 // TODO: multi-line
 // TODO: line ending backslash
 // TODO: multi-line literal string '''aoeu'''

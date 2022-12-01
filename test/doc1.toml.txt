@@ -1,5 +1,5 @@
 aa = 34
- bb = "abc"
+ bb = "abc\u0416"
   cc = [3, 15,
   20,]
 dd = ["aa", "bb"]

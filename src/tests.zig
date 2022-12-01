@@ -52,7 +52,7 @@ test "parse into struct" {
     try main.parseIntoStruct(content, &ctx, Aa, &aa);
 
     try testing.expect(aa.aa == 34);
-    try testing.expect(std.mem.eql(u8, aa.bb, "abc"));
+    try testing.expect(std.mem.eql(u8, aa.bb, "abcЖ"));
     try testing.expect(aa.cc.len == 3);
     try testing.expect(aa.cc[0] == 3);
     try testing.expect(aa.cc[1] == 15);
