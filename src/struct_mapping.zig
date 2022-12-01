@@ -66,7 +66,14 @@ fn setValue(ctx: *Context, comptime T: type, dest: *T, value: *const Value) !voi
             }
         },
         .Pointer => |tinfo| {
-            if (tinfo.size != .Slice) return error.NotSupportedFieldType;
+            switch (tinfo.size) {
+                .One => {
+                    dest.* = try ctx.alloc.create(tinfo.child);
+                    return setValue(ctx, tinfo.child, dest.*, value);
+                },
+                .Slice => {},
+                else => return error.NotSupportedFieldType,
+            }
             switch (tinfo.child) {
                 u8 => {
                     switch (value.*) {

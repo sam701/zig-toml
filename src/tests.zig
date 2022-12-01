@@ -40,6 +40,7 @@ test "parse into struct" {
         t3: Tt,
         t4: Tt,
         p1: P1,
+        pt1: *T1,
     };
 
     var ctx = struct_mapping.Context.init(testing.allocator);
@@ -77,12 +78,15 @@ test "parse into struct" {
     try testing.expect(aa.p1.p2[0].t1.v1 == 44);
     try testing.expect(aa.p1.p2[1].t1.v1 == 50);
 
+    try testing.expect(aa.pt1.v1 == 102);
+
     ctx.alloc.free(aa.bb);
     ctx.alloc.free(aa.cc);
     ctx.alloc.free(aa.dd[0]);
     ctx.alloc.free(aa.dd[1]);
     ctx.alloc.free(aa.dd);
     ctx.alloc.free(aa.p1.p2);
+    ctx.alloc.destroy(aa.pt1);
 
     ctx.deinit();
 }
