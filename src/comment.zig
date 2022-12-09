@@ -1,14 +1,16 @@
 const std = @import("std");
-const Context = @import("./parser.zig").Context;
+const parser = @import("./parser.zig");
+const Context = parser.Context;
 const spaces = @import("./spaces.zig");
 const testing = std.testing;
 
 pub fn skipSpacesAndComments(ctx: *Context) void {
-    while (ctx.input.len > 0) {
+    while (ctx.current()) |_| {
         spaces.skipSpacesAndLineBreaks(ctx);
-        if (ctx.input.len == 0) return;
-        if (ctx.input[0] != '#') return;
-        gotoNextLine(ctx);
+        if (ctx.current()) |c| {
+            if (c != '#') return;
+            gotoNextLine(ctx);
+        }
     }
 }
 
@@ -22,15 +24,12 @@ fn gotoNextLine(ctx: *Context) void {
 }
 
 test "skip" {
-    var ctx = Context{
-        .input = 
+    var ctx = parser.testInput(
         \\  # comment # abc  
         \\    
         \\    # comment
         \\  a
-        ,
-        .alloc = testing.allocator,
-    };
+    );
     skipSpacesAndComments(&ctx);
-    try testing.expect(ctx.input[0] == 'a');
+    try testing.expect(ctx.current().? == 'a');
 }
