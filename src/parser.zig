@@ -124,6 +124,7 @@ pub const String = struct {
 
 pub fn consumeString(ctx: *Context, str: []const u8) !void {
     if (std.mem.startsWith(u8, ctx.input, str)) {
+        ctx.position.pos += str.len;
         ctx.input = ctx.input[str.len..];
     } else {
         return error.UnexpectedToken;
