@@ -56,27 +56,19 @@ test "new line" {
 }
 
 test "skip spaces" {
-    const txt = "    \th ";
-    var ctx = Context{
-        .input = txt,
-        .alloc = testing.allocator,
-    };
+    var ctx = parser.testInput("    \th ");
 
     skipSpaces(&ctx);
-    try testing.expect(ctx.input[0] == 'h');
+    try testing.expect(ctx.current().? == 'h');
     skipSpaces(&ctx);
-    try testing.expect(ctx.input[0] == 'h');
+    try testing.expect(ctx.current().? == 'h');
 }
 
 test "skip lines " {
-    const txt = "    \t\n   \r\n  hello ";
-    var ctx = Context{
-        .input = txt,
-        .alloc = testing.allocator,
-    };
+    var ctx = parser.testInput("    \t\n   \r\n  hello ");
 
     skipSpacesAndLineBreaks(&ctx);
-    try testing.expect(ctx.input[0] == 'h');
+    try testing.expect(ctx.current().? == 'h');
     skipSpacesAndLineBreaks(&ctx);
-    try testing.expect(ctx.input[0] == 'h');
+    try testing.expect(ctx.current().? == 'h');
 }

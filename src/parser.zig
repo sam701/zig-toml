@@ -48,15 +48,15 @@ test "next" {
     try testing.expect(ctx.next().? == 'b');
     try testing.expect(ctx.position.pos == 2);
     try testing.expect(ctx.position.line == 1);
-    try testing.expect(ctx.input[0] == 'b');
+    try testing.expect(ctx.current().? == 'b');
     _ = ctx.next();
     try testing.expect(ctx.position.pos == 3);
     try testing.expect(ctx.position.line == 1);
-    try testing.expect(ctx.input[0] == '\n');
+    try testing.expect(ctx.current().? == '\n');
     _ = ctx.next();
     try testing.expect(ctx.position.pos == 1);
     try testing.expect(ctx.position.line == 2);
-    try testing.expect(ctx.input[0] == 'c');
+    try testing.expect(ctx.current().? == 'c');
 }
 
 pub fn takeWhile(ctx: *Context, comptime tester: fn (u8) bool) []const u8 {
