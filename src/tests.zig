@@ -41,6 +41,8 @@ test "parse into struct" {
         t4: Tt,
         p1: P1,
         pt1: *T1,
+        f1: f64,
+        f2: f64,
     };
 
     var ctx = struct_mapping.Context.init(testing.allocator);
@@ -56,6 +58,8 @@ test "parse into struct" {
     try testing.expect(aa.aa == 34);
     try testing.expect(std.mem.eql(u8, aa.bb, "abcЖ"));
     try testing.expect(aa.b1 == true);
+    try testing.expect(aa.f1 == 125.55);
+    try testing.expect(aa.f2 == 125.0);
     try testing.expect(aa.cc.len == 3);
     try testing.expect(aa.cc[0] == 3);
     try testing.expect(aa.cc[1] == 15);

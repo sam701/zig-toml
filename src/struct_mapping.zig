@@ -57,6 +57,19 @@ fn setValue(ctx: *Context, comptime T: type, dest: *T, value: *const Value) !voi
                 else => return error.InvalidValueType,
             }
         },
+        .Float => {
+            switch (value.*) {
+                .float => |x| {
+                    dest.* = x;
+                    // TODO: support different float sizes
+                },
+                .integer => |x| {
+                    dest.* = @intToFloat(f64, x);
+                    // TODO: support different float sizes
+                },
+                else => return error.InvalidValueType,
+            }
+        },
         .Bool => {
             switch (value.*) {
                 .boolean => |b| {

@@ -35,6 +35,13 @@ pub const Context = struct {
         if (self.input.len == 0) return null;
         return self.input[0];
     }
+
+    pub fn advance(self: *Context, count: usize) void {
+        var cnt: usize = 0;
+        while (cnt < count) : (cnt += 1) {
+            _ = self.next();
+        }
+    }
 };
 
 test "next" {

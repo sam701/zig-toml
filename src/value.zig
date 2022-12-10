@@ -4,6 +4,7 @@ const testing = std.testing;
 
 const string = @import("./string.zig");
 const integer = @import("./integer.zig");
+const float = @import("./float.zig");
 const array = @import("./array.zig");
 const tablepkg = @import("./table.zig");
 const Table = tablepkg.Table;
@@ -13,6 +14,7 @@ pub const ValueList = std.ArrayList(Value);
 pub const Value = union(enum) {
     string: []const u8,
     integer: i64,
+    float: f64,
     boolean: bool,
     array: *ValueList,
     table: *Table,
@@ -43,7 +45,7 @@ pub const Value = union(enum) {
     pub fn print(self: *const Value) void {
         switch (self.*) {
             .string => |x| std.debug.print("\"{s}\"", .{x}),
-            .integer => |x| std.debug.print("{}", .{x}),
+            .integer, .float => |x| std.debug.print("{}", .{x}),
             .array => |ar| {
                 std.debug.print("[", .{});
                 for (ar.items) |x| {
@@ -71,24 +73,42 @@ pub fn parse(ctx: *parser.Context) anyerror!Value {
         return Value{ .string = str };
     } else if (try tablepkg.parseInlineTable(ctx)) |table| {
         return Value{ .table = table };
-    } else if (parseBool(ctx)) |b| {
-        return Value{ .boolean = b };
-    } else if (try integer.parse(ctx)) |int| {
-        return Value{ .integer = int };
     } else if (try array.parse(ctx)) |ar| {
         return Value{ .array = ar };
+    } else if (parseScalar(ctx)) |x| {
+        return x;
     }
     return error.CannotParseValue;
 }
 
-fn parseBool(ctx: *parser.Context) ?bool {
-    if (parser.consumeString(ctx, "true")) {
-        return true;
-    } else |_| if (parser.consumeString(ctx, "false")) {
-        return false;
-    } else |_| {
+fn interpretBool(str: []const u8) ?bool {
+    if (std.mem.eql(u8, "true", str)) return true;
+    if (std.mem.eql(u8, "false", str)) return false;
+    return null;
+}
+
+fn isScalarChar(c: u8) bool {
+    return switch (c) {
+        ' ', ',', '\t', '\r', '\n', ']', '}' => false,
+        else => true,
+    };
+}
+
+fn parseScalar(ctx: *parser.Context) ?Value {
+    var sc = ctx.*;
+    var txt = parser.takeWhile(&sc, isScalarChar);
+    var val: Value = undefined;
+    if (integer.interpret(txt)) |x| {
+        val = Value{ .integer = x };
+    } else if (float.interpret(txt)) |x| {
+        val = Value{ .float = x };
+    } else if (interpretBool(txt)) |x| {
+        val = Value{ .boolean = x };
+    } else {
         return null;
     }
+    ctx.advance(ctx.input.len - sc.input.len);
+    return val;
 }
 
 test "value string" {
@@ -108,21 +128,23 @@ test "value integer" {
     try testing.expect(val.integer == 123);
 }
 
+test "value float" {
+    var ctx = parser.testInput(
+        \\123.44
+    );
+    var val = try parse(&ctx);
+    try testing.expect(val.float == 123.44);
+}
+
 test "bool" {
-    var ctx = parser.testInput("123");
-    try testing.expect(parseBool(&ctx) == null);
+    try testing.expect(interpretBool("123") == null);
+    try testing.expect(interpretBool("true").? == true);
+    try testing.expect(interpretBool("false").? == false);
 
-    ctx = parser.testInput("true");
-    try testing.expect(parseBool(&ctx).? == true);
-
-    ctx = parser.testInput("false");
-    try testing.expect(parseBool(&ctx).? == false);
-
-    ctx = parser.testInput("true");
+    var ctx = parser.testInput("true");
     var val = try parse(&ctx);
     try testing.expect(val.boolean == true);
 }
 
-// TODO: floats
 // TODO: date
 // TODO: date time
