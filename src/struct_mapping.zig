@@ -4,6 +4,7 @@ const testing = std.testing;
 
 const Value = @import("./value.zig").Value;
 const Table = @import("./table.zig").Table;
+const datetime = @import("./datetime.zig");
 
 pub const Context = struct {
     alloc: std.mem.Allocator,
@@ -47,6 +48,18 @@ pub fn intoStruct(ctx: *Context, comptime T: type, dest: *T, table: *Table) !voi
 }
 
 fn setValue(ctx: *Context, comptime T: type, dest: *T, value: *const Value) !void {
+    switch (T) {
+        datetime.Date => {
+            switch (value.*) {
+                .date => |x| {
+                    dest.* = x;
+                    return;
+                },
+                else => return error.InvalidValueType,
+            }
+        },
+        else => {},
+    }
     switch (@typeInfo(T)) {
         .Int => {
             switch (value.*) {

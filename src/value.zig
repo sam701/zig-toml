@@ -7,6 +7,7 @@ const integer = @import("./integer.zig");
 const float = @import("./float.zig");
 const array = @import("./array.zig");
 const tablepkg = @import("./table.zig");
+const datetime = @import("./datetime.zig");
 const Table = tablepkg.Table;
 
 pub const ValueList = std.ArrayList(Value);
@@ -16,6 +17,8 @@ pub const Value = union(enum) {
     integer: i64,
     float: f64,
     boolean: bool,
+    date: datetime.Date,
+
     array: *ValueList,
     table: *Table,
 
@@ -46,6 +49,7 @@ pub const Value = union(enum) {
         switch (self.*) {
             .string => |x| std.debug.print("\"{s}\"", .{x}),
             .integer, .float => |x| std.debug.print("{}", .{x}),
+            .date => |x| std.debug.print("{}-{}-{}", .{ x.year, x.month, x.day }),
             .array => |ar| {
                 std.debug.print("[", .{});
                 for (ar.items) |x| {
@@ -75,7 +79,7 @@ pub fn parse(ctx: *parser.Context) anyerror!Value {
         return Value{ .table = table };
     } else if (try array.parse(ctx)) |ar| {
         return Value{ .array = ar };
-    } else if (parseScalar(ctx)) |x| {
+    } else if (try parseScalar(ctx)) |x| {
         return x;
     }
     return error.CannotParseValue;
@@ -94,7 +98,7 @@ fn isScalarChar(c: u8) bool {
     };
 }
 
-fn parseScalar(ctx: *parser.Context) ?Value {
+fn parseScalar(ctx: *parser.Context) !?Value {
     var sc = ctx.*;
     var txt = parser.takeWhile(&sc, isScalarChar);
     var val: Value = undefined;
@@ -104,11 +108,27 @@ fn parseScalar(ctx: *parser.Context) ?Value {
         val = Value{ .float = x };
     } else if (interpretBool(txt)) |x| {
         val = Value{ .boolean = x };
+    } else if (try datetime.interpretDate(txt)) |x| {
+        val = Value{ .date = x };
     } else {
         return null;
     }
     ctx.advance(ctx.input.len - sc.input.len);
     return val;
+}
+
+fn testScalar(txt: []const u8, expected: Value) !void {
+    var ctx = parser.testInput(txt);
+    var parsed = try parseScalar(&ctx);
+    try testing.expect(std.meta.eql(parsed.?, expected));
+}
+
+test "scalar" {
+    try testScalar("123", Value{ .integer = 123 });
+    try testScalar("123.44", Value{ .float = 123.44 });
+    try testScalar("true", Value{ .boolean = true });
+    try testScalar("false", Value{ .boolean = false });
+    try testScalar("2022-07-03", Value{ .date = datetime.Date{ .year = 2022, .month = 7, .day = 3 } });
 }
 
 test "value string" {
@@ -118,22 +138,6 @@ test "value string" {
     var val = try parse(&ctx);
     try testing.expect(std.mem.eql(u8, val.string, "abc"));
     val.deinit(ctx.alloc);
-}
-
-test "value integer" {
-    var ctx = parser.testInput(
-        \\123
-    );
-    var val = try parse(&ctx);
-    try testing.expect(val.integer == 123);
-}
-
-test "value float" {
-    var ctx = parser.testInput(
-        \\123.44
-    );
-    var val = try parse(&ctx);
-    try testing.expect(val.float == 123.44);
 }
 
 test "bool" {
@@ -146,5 +150,4 @@ test "bool" {
     try testing.expect(val.boolean == true);
 }
 
-// TODO: date
 // TODO: date time

@@ -2,6 +2,7 @@ const std = @import("std");
 const testing = std.testing;
 const main = @import("./main.zig");
 const struct_mapping = @import("./struct_mapping.zig");
+const datetime = @import("./datetime.zig");
 
 test "full" {
     var m = try main.parseIntoTable(
@@ -43,6 +44,7 @@ test "parse into struct" {
         pt1: *T1,
         f1: f64,
         f2: f64,
+        d1: datetime.Date,
     };
 
     var ctx = struct_mapping.Context.init(testing.allocator);
@@ -60,6 +62,7 @@ test "parse into struct" {
     try testing.expect(aa.b1 == true);
     try testing.expect(aa.f1 == 125.55);
     try testing.expect(aa.f2 == 125.0);
+    try testing.expect(std.meta.eql(aa.d1, datetime.Date{ .year = 2022, .month = 12, .day = 10 }));
     try testing.expect(aa.cc.len == 3);
     try testing.expect(aa.cc[0] == 3);
     try testing.expect(aa.cc[1] == 15);
