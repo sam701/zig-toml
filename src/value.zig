@@ -19,6 +19,7 @@ pub const Value = union(enum) {
     boolean: bool,
     date: datetime.Date,
     time: datetime.Time,
+    datetime: datetime.DateTime,
 
     array: *ValueList,
     table: *Table,
@@ -52,6 +53,7 @@ pub const Value = union(enum) {
             .integer, .float => |x| std.debug.print("{}", .{x}),
             .date => |x| std.debug.print("{}-{}-{}", .{ x.year, x.month, x.day }),
             .time => |x| std.debug.print("{}:{}:{}.{}", .{ x.hour, x.minute, x.second, x.nanosecond }),
+            .datetime => |x| std.debug.print("{}-{}-{}T{}:{}:{}.{}", .{ x.date.year, x.date.month, x.date.day, x.time.hour, x.time.minute, x.time.second, x.time.nanosecond }),
             .array => |ar| {
                 std.debug.print("[", .{});
                 for (ar.items) |x| {
@@ -103,6 +105,7 @@ fn isScalarChar(c: u8) bool {
 fn parseScalar(ctx: *parser.Context) !?Value {
     var sc = ctx.*;
     var txt = parser.takeWhile(&sc, isScalarChar);
+
     var val: Value = undefined;
     if (integer.interpret(txt)) |x| {
         val = Value{ .integer = x };
@@ -110,14 +113,29 @@ fn parseScalar(ctx: *parser.Context) !?Value {
         val = Value{ .float = x };
     } else if (interpretBool(txt)) |x| {
         val = Value{ .boolean = x };
+    } else if (try datetime.interpretDateTime(txt)) |x| {
+        val = Value{ .datetime = x };
     } else if (try datetime.interpretDate(txt)) |x| {
-        val = Value{ .date = x };
+        if (sc.input.len > 9 and sc.input[0] == ' ') { // Space separator between date and time
+            var sc2 = sc;
+            _ = sc2.next();
+            var txt2 = parser.takeWhile(&sc2, isScalarChar);
+            var to = try datetime.interpretTimeAndOffset(txt2) orelse return error.InvalidTime;
+            val = Value{ .datetime = datetime.DateTime{
+                .date = x,
+                .time = to.time,
+                .offset_minutes = to.offset_minutes,
+            } };
+            sc = sc2;
+        } else {
+            val = Value{ .date = x };
+        }
     } else if (try datetime.interpretTime(txt)) |x| {
         val = Value{ .time = x };
     } else {
         return null;
     }
-    ctx.advance(ctx.input.len - sc.input.len);
+    ctx.* = sc;
     return val;
 }
 
@@ -133,6 +151,11 @@ test "scalar" {
     try testScalar("true", Value{ .boolean = true });
     try testScalar("false", Value{ .boolean = false });
     try testScalar("2022-07-03", Value{ .date = datetime.Date{ .year = 2022, .month = 7, .day = 3 } });
+    try testScalar("2022-07-03 03:15:00Z", Value{ .datetime = datetime.DateTime{
+        .date = datetime.Date{ .year = 2022, .month = 7, .day = 3 },
+        .time = datetime.Time{ .hour = 3, .minute = 15, .second = 0 },
+        .offset_minutes = 0,
+    } });
 }
 
 test "value string" {
@@ -153,5 +176,3 @@ test "bool" {
     var val = try parse(&ctx);
     try testing.expect(val.boolean == true);
 }
-
-// TODO: date time

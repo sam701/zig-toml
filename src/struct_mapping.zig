@@ -67,6 +67,15 @@ fn setValue(ctx: *Context, comptime T: type, dest: *T, value: *const Value) !voi
                 else => return error.InvalidValueType,
             }
         },
+        datetime.DateTime => {
+            switch (value.*) {
+                .datetime => |x| {
+                    dest.* = x;
+                    return;
+                },
+                else => return error.InvalidValueType,
+            }
+        },
         else => {},
     }
     switch (@typeInfo(T)) {

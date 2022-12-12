@@ -46,6 +46,7 @@ test "parse into struct" {
         f2: f64,
         d1: datetime.Date,
         ti1: datetime.Time,
+        dt1: datetime.DateTime,
     };
 
     var ctx = struct_mapping.Context.init(testing.allocator);
@@ -65,6 +66,11 @@ test "parse into struct" {
     try testing.expect(aa.f2 == 125.0);
     try testing.expect(std.meta.eql(aa.d1, datetime.Date{ .year = 2022, .month = 12, .day = 10 }));
     try testing.expect(std.meta.eql(aa.ti1, datetime.Time{ .hour = 9, .minute = 7, .second = 14, .nanosecond = 345678000 }));
+    try testing.expect(std.meta.eql(aa.dt1, datetime.DateTime{
+        .date = datetime.Date{ .year = 2022, .month = 12, .day = 14 },
+        .time = datetime.Time{ .hour = 16, .minute = 44, .second = 30 },
+        .offset_minutes = 120,
+    }));
     try testing.expect(aa.cc.len == 3);
     try testing.expect(aa.cc[0] == 3);
     try testing.expect(aa.cc[1] == 15);

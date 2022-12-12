@@ -107,3 +107,60 @@ test "time" {
     try testing.expectError(TimeError.InvalidNanoSecond, interpretTime("23:16:17.12345a"));
     try testing.expectError(TimeError.InvalidNanoSecond, interpretTime("23:16:17.1234567"));
 }
+
+pub const TimeWithOffset = struct {
+    time: Time,
+    offset_minutes: ?i16 = null,
+};
+
+pub fn interpretTimeAndOffset(txt: []const u8) !?TimeWithOffset {
+    if (txt.len < 8) return null;
+    if (txt.len == 8) return TimeWithOffset{ .time = try interpretTime(txt) orelse return null };
+
+    var to: TimeWithOffset = undefined;
+    if (txt[txt.len - 1] == 'Z') {
+        to.offset_minutes = 0;
+        to.time = (try interpretTime(txt[0 .. txt.len - 1])) orelse return null;
+    } else if (try interpretOffset(txt[txt.len - 6 ..])) |offset| {
+        to.time = try interpretTime(txt[0 .. txt.len - 6]) orelse return null;
+        to.offset_minutes = offset;
+    } else {
+        return null;
+    }
+    return to;
+}
+
+const OffsetError = error{
+    InvalidTimeOffset,
+};
+
+fn interpretOffset(txt: []const u8) OffsetError!?i16 {
+    if ((txt[0] == '+' or txt[0] == '-') and txt[3] == ':') {
+        var hour = std.fmt.parseInt(i16, txt[0..3], 10) catch return error.InvalidTimeOffset;
+        var minute = std.fmt.parseInt(i16, txt[4..], 10) catch return error.InvalidTimeOffset;
+        if (hour > 11 or hour < -11 or minute > 59) return error.InvalidTimeOffset;
+        return hour * 60 + std.math.sign(hour) * minute;
+    } else return null;
+}
+
+pub const DateTimeError = DateError || TimeError || OffsetError;
+
+pub fn interpretDateTime(txt: []const u8) DateTimeError!?DateTime {
+    if (txt.len < 19 or txt[10] != 'T') return null;
+    var date = try interpretDate(txt[0..10]) orelse return null;
+    var time_with_offset = try interpretTimeAndOffset(txt[11..]) orelse return null;
+    return DateTime{
+        .date = date,
+        .time = time_with_offset.time,
+        .offset_minutes = time_with_offset.offset_minutes,
+    };
+}
+
+test "datetime" {
+    var dt = try interpretDateTime("2022-12-14T09:14:58.555555-02:30");
+    try testing.expect(std.meta.eql(dt.?, DateTime{
+        .date = Date{ .year = 2022, .month = 12, .day = 14 },
+        .time = Time{ .hour = 9, .minute = 14, .second = 58, .nanosecond = 555555000 },
+        .offset_minutes = -150,
+    }));
+}
