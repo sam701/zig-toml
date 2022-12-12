@@ -18,6 +18,7 @@ pub const Value = union(enum) {
     float: f64,
     boolean: bool,
     date: datetime.Date,
+    time: datetime.Time,
 
     array: *ValueList,
     table: *Table,
@@ -50,6 +51,7 @@ pub const Value = union(enum) {
             .string => |x| std.debug.print("\"{s}\"", .{x}),
             .integer, .float => |x| std.debug.print("{}", .{x}),
             .date => |x| std.debug.print("{}-{}-{}", .{ x.year, x.month, x.day }),
+            .time => |x| std.debug.print("{}:{}:{}.{}", .{ x.hour, x.minute, x.second, x.nanosecond }),
             .array => |ar| {
                 std.debug.print("[", .{});
                 for (ar.items) |x| {
@@ -110,6 +112,8 @@ fn parseScalar(ctx: *parser.Context) !?Value {
         val = Value{ .boolean = x };
     } else if (try datetime.interpretDate(txt)) |x| {
         val = Value{ .date = x };
+    } else if (try datetime.interpretTime(txt)) |x| {
+        val = Value{ .time = x };
     } else {
         return null;
     }
