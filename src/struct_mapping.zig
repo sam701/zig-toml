@@ -113,6 +113,7 @@ fn setValue(ctx: *Context, comptime T: type, dest: *T, value: *const Value) !voi
             switch (tinfo.size) {
                 .One => {
                     dest.* = try ctx.alloc.create(tinfo.child);
+                    errdefer ctx.alloc.destroy(dest.*);
                     return setValue(ctx, tinfo.child, dest.*, value);
                 },
                 .Slice => {},
@@ -131,6 +132,7 @@ fn setValue(ctx: *Context, comptime T: type, dest: *T, value: *const Value) !voi
                     switch (value.*) {
                         .array => |ar| {
                             var dest_ar = try ctx.alloc.alloc(tinfo.child, ar.items.len);
+                            errdefer ctx.alloc.free(dest_ar);
                             for (ar.items) |_, ix| {
                                 try setValue(ctx, tinfo.child, &dest_ar[ix], &ar.items[ix]);
                                 // TODO: set path

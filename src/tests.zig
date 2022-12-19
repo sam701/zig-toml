@@ -113,5 +113,5 @@ test "deinit table" {
     defer testing.allocator.free(content);
 
     var tab = try main.parseIntoTable(content, testing.allocator);
-    main.deinitTable(&tab);
+    defer main.deinitTable(&tab);
 }

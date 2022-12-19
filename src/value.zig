@@ -176,3 +176,11 @@ test "bool" {
     var val = try parse(&ctx);
     try testing.expect(val.boolean == true);
 }
+
+test "error in list" {
+    var ctx = parser.testInput(
+        \\[3, 4u]
+    );
+    try testing.expectError(error.CannotParseValue, parse(&ctx));
+    try testing.expectEqual(parser.Position{ .line = 1, .pos = 5 }, ctx.position);
+}

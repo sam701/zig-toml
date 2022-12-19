@@ -12,10 +12,11 @@ const comment = @import("./comment.zig");
 pub const Table = std.StringHashMap(Value);
 
 fn setValue(ctx: *parser.Context, table: *Table, key: parser.String, value: Value) !void {
+    defer key.deinit(ctx.alloc);
     var copiedKey = try ctx.alloc.alloc(u8, key.content.len);
+    errdefer ctx.alloc.free(copiedKey);
     std.mem.copy(u8, copiedKey, key.content);
     try table.put(copiedKey, value);
-    key.deinit(ctx.alloc);
 }
 
 fn handleKeyPair(ctx: *parser.Context, table: *Table, pair: *kv.KeyValuePair) !void {
@@ -37,6 +38,7 @@ fn handleKeyPair(ctx: *parser.Context, table: *Table, pair: *kv.KeyValuePair) !v
 
 pub fn parseRootTable(ctx: *parser.Context) !Table {
     var table = Table.init(ctx.alloc);
+    errdefer deinitTable(&table);
     try parseTableContent(ctx, &table);
     return table;
 }
@@ -84,6 +86,7 @@ fn tableAdvance(ctx: *parser.Context, table: *Table, key: parser.String, new_arr
             .array => |ar| {
                 if (new_array_item) {
                     var new_table = try ctx.alloc.create(Table);
+                    errdefer ctx.alloc.destroy(new_table);
                     new_table.* = Table.init(ctx.alloc);
                     var new_value = Value{ .table = new_table };
                     try ar.append(new_value);
@@ -99,11 +102,13 @@ fn tableAdvance(ctx: *parser.Context, table: *Table, key: parser.String, new_arr
         }
     } else {
         var new_table = try ctx.alloc.create(Table);
+        errdefer ctx.alloc.destroy(new_table);
         new_table.* = Table.init(ctx.alloc);
         var new_value = Value{ .table = new_table };
 
         if (new_array_item) {
             var list = try ctx.alloc.create(ValueList);
+            errdefer ctx.alloc.destroy(list);
             list.* = ValueList.init(ctx.alloc);
             try list.append(new_value);
             new_value = Value{ .array = list };
@@ -156,11 +161,16 @@ pub fn parseInlineTable(ctx: *parser.Context) !?*Table {
     parser.consumeString(ctx, "{") catch return null;
 
     var table = try ctx.alloc.create(Table);
+    errdefer ctx.alloc.destroy(table);
+
     table.* = Table.init(ctx.alloc);
+    errdefer deinitTable(table);
 
     while (true) {
         spaces.skipSpaces(ctx);
         var pair = try kv.parse(ctx);
+        errdefer pair.deinit(ctx.alloc);
+
         try handleKeyPair(ctx, table, &pair);
         spaces.skipSpaces(ctx);
         parser.consumeString(ctx, ",") catch {
@@ -202,4 +212,21 @@ test "inline table" {
     try testing.expect(m.get("bb").?.table.get("cc").?.integer == 4);
     deinitTable(m);
     testing.allocator.destroy(m);
+}
+
+test "error in table" {
+    var ctx = parser.testInput(
+        \\aa = "test"
+        \\bb = 4u
+    );
+    try testing.expectError(error.CannotParseValue, parseRootTable(&ctx));
+    try testing.expectEqual(parser.Position{ .line = 2, .pos = 6 }, ctx.position);
+}
+
+test "error in inline table" {
+    var ctx = parser.testInput(
+        \\{aa = 3, bb = 4u}
+    );
+    try testing.expectError(error.CannotParseValue, parseInlineTable(&ctx));
+    try testing.expectEqual(parser.Position{ .line = 1, .pos = 15 }, ctx.position);
 }

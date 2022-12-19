@@ -11,7 +11,11 @@ pub fn parse(ctx: *parser.Context) !?*value.ValueList {
     comment.skipSpacesAndComments(ctx);
 
     var ar = try ctx.alloc.create(value.ValueList);
+    errdefer ctx.alloc.destroy(ar);
+
     ar.* = value.ValueList.init(ctx.alloc);
+    errdefer ar.deinit();
+
     while (true) {
         var val = try value.parse(ctx);
         try ar.append(val);
