@@ -1,0 +1,14 @@
+master = true
+expires_at = 2023-01-01T19:00:00Z
+
+[local]
+host = "0.0.0.0"
+port = 9000
+
+[[peers]]
+host = "10.0.0.1"
+port = 9000
+
+[[peers]]
+host = "10.0.0.2"
+port = 8000

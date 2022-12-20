@@ -5,15 +5,19 @@ const struct_mapping = @import("./struct_mapping.zig");
 const datetime = @import("./datetime.zig");
 
 test "full" {
-    var m = try main.parseIntoTable(
+    var p = main.Parser(main.Table).init(testing.allocator);
+    defer p.deinit();
+
+    var m: main.Table = undefined;
+    try p.parseString(
         \\  aa = "a1"
         \\
         \\    bb = 33
-    , testing.allocator);
+    , &m);
+    defer main.deinitTableRecursively(&m);
     try testing.expect(m.count() == 2);
     try testing.expect(std.mem.eql(u8, m.get("aa").?.string, "a1"));
     try testing.expect(m.get("bb").?.integer == 33);
-    main.deinitTableRecursively(&m);
 }
 
 test "parse into struct" {
@@ -49,15 +53,11 @@ test "parse into struct" {
         dt1: datetime.DateTime,
     };
 
-    var ctx = struct_mapping.Context.init(testing.allocator);
     var aa: Aa = undefined;
+    var p = main.Parser(Aa).init(testing.allocator);
+    defer p.deinit();
 
-    const file = try std.fs.cwd().openFile("./test/doc1.toml.txt", .{});
-    defer file.close();
-    var content = try file.readToEndAlloc(testing.allocator, 1024 * 1024 * 1024);
-    defer testing.allocator.free(content);
-
-    try main.parseIntoStruct(content, &ctx, Aa, &aa);
+    try p.parseFile("./test/doc1.toml.txt", &aa);
 
     try testing.expect(aa.aa == 34);
     try testing.expect(std.mem.eql(u8, aa.bb, "abcЖ"));
@@ -95,23 +95,20 @@ test "parse into struct" {
 
     try testing.expect(aa.pt1.v1 == 102);
 
-    ctx.alloc.free(aa.bb);
-    ctx.alloc.free(aa.cc);
-    ctx.alloc.free(aa.dd[0]);
-    ctx.alloc.free(aa.dd[1]);
-    ctx.alloc.free(aa.dd);
-    ctx.alloc.free(aa.p1.p2);
-    ctx.alloc.destroy(aa.pt1);
-
-    ctx.deinit();
+    testing.allocator.free(aa.bb);
+    testing.allocator.free(aa.cc);
+    testing.allocator.free(aa.dd[0]);
+    testing.allocator.free(aa.dd[1]);
+    testing.allocator.free(aa.dd);
+    testing.allocator.free(aa.p1.p2);
+    testing.allocator.destroy(aa.pt1);
 }
 
 test "deinit table" {
-    const file = try std.fs.cwd().openFile("./test/doc1.toml.txt", .{});
-    defer file.close();
-    var content = try file.readToEndAlloc(testing.allocator, 1024 * 1024 * 1024);
-    defer testing.allocator.free(content);
+    var tab: main.Table = undefined;
+    var p = main.Parser(main.Table).init(testing.allocator);
+    defer p.deinit();
 
-    var tab = try main.parseIntoTable(content, testing.allocator);
-    defer main.deinitTableRecursively(&tab);
+    try p.parseFile("./test/doc1.toml.txt", &tab);
+    main.deinitTableRecursively(&tab);
 }
