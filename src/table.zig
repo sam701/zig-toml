@@ -38,7 +38,7 @@ fn handleKeyPair(ctx: *parser.Context, table: *Table, pair: *kv.KeyValuePair) !v
 
 pub fn parseRootTable(ctx: *parser.Context) !Table {
     var table = Table.init(ctx.alloc);
-    errdefer deinitTable(&table);
+    errdefer deinitTableRecursively(&table);
     try parseTableContent(ctx, &table);
     return table;
 }
@@ -164,7 +164,7 @@ pub fn parseInlineTable(ctx: *parser.Context) !?*Table {
     errdefer ctx.alloc.destroy(table);
 
     table.* = Table.init(ctx.alloc);
-    errdefer deinitTable(table);
+    errdefer deinitTableRecursively(table);
 
     while (true) {
         spaces.skipSpaces(ctx);
@@ -182,7 +182,7 @@ pub fn parseInlineTable(ctx: *parser.Context) !?*Table {
     return table;
 }
 
-pub fn deinitTable(table: *Table) void {
+pub fn deinitTableRecursively(table: *Table) void {
     var it = table.iterator();
     while (it.next()) |entry| {
         table.allocator.free(entry.key_ptr.*);
@@ -201,7 +201,7 @@ test "table content" {
     try testing.expect(m.count() == 2);
     try testing.expect(std.mem.eql(u8, m.get("aa").?.string, "a1"));
     try testing.expect(m.get("bb").?.integer == 33);
-    deinitTable(&m);
+    deinitTableRecursively(&m);
 }
 
 test "inline table" {
@@ -210,7 +210,7 @@ test "inline table" {
     try testing.expect(m.count() == 2);
     try testing.expect(m.get("aa").?.integer == 3);
     try testing.expect(m.get("bb").?.table.get("cc").?.integer == 4);
-    deinitTable(m);
+    deinitTableRecursively(m);
     testing.allocator.destroy(m);
 }
 

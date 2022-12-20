@@ -13,7 +13,7 @@ test "full" {
     try testing.expect(m.count() == 2);
     try testing.expect(std.mem.eql(u8, m.get("aa").?.string, "a1"));
     try testing.expect(m.get("bb").?.integer == 33);
-    main.deinitTable(&m);
+    main.deinitTableRecursively(&m);
 }
 
 test "parse into struct" {
@@ -113,5 +113,5 @@ test "deinit table" {
     defer testing.allocator.free(content);
 
     var tab = try main.parseIntoTable(content, testing.allocator);
-    defer main.deinitTable(&tab);
+    defer main.deinitTableRecursively(&tab);
 }

@@ -18,4 +18,4 @@ pub fn parseIntoStruct(input: []const u8, ctx: *struct_mapping.Context, comptime
     try struct_mapping.intoStruct(ctx, T, dest, &map);
 }
 
-pub const deinitTable = table.deinitTable;
+pub const deinitTableRecursively = table.deinitTableRecursively;
