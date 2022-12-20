@@ -3,8 +3,7 @@
 Zig TOML (v1.0.0) parser package.
 
 ## Features
-* [x] Integers
-* [x] Hexadecimal, octal, and binary numbers
+* [x] Integers, hexadecimal, octal, and binary numbers
 * [x] Floats
 * [x] Booleans
 * [x] Comments
@@ -12,17 +11,11 @@ Zig TOML (v1.0.0) parser package.
 * [x] Tables
 * [x] Array of Tables
 * [x] Inline Table
-* [x] Basic single-line strings
-* [x] Literal single-line strings
-* [x] String escapes
-* [x] String unicode escapes
+* [x] Single-line strings
+* [x] String escapes (also unicode)
 * [ ] Multi-line strings
-* [ ] Literal multi-line strings
 * [ ] Multi-line string leading space trimming
-* [x] Date
-* [x] Time
-* [x] Date-Time
-* [x] Offset Date-Time
+* [x] Date, Time, Date-Time, Offset
 * [x] Mapping to structs
 * [x] Mapping to slices
 * [ ] Mapping to arrays
