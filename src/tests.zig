@@ -53,10 +53,10 @@ test "parse into struct" {
         dt1: datetime.DateTime,
     };
 
-    var aa: Aa = undefined;
     var p = main.Parser(Aa).init(testing.allocator);
     defer p.deinit();
 
+    var aa: Aa = undefined;
     try p.parseFile("./test/doc1.toml.txt", &aa);
 
     try testing.expect(aa.aa == 34);
@@ -105,10 +105,10 @@ test "parse into struct" {
 }
 
 test "deinit table" {
-    var tab: main.Table = undefined;
     var p = main.Parser(main.Table).init(testing.allocator);
     defer p.deinit();
 
+    var tab: main.Table = undefined;
     try p.parseFile("./test/doc1.toml.txt", &tab);
     main.deinitTableRecursively(&tab);
 }

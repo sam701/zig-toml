@@ -18,10 +18,10 @@ const Config = struct {
 };
 
 pub fn main() anyerror!void {
-    var config: Config = undefined;
     var parser = toml.Parser(Config).init(allocator);
     defer parser.deinit();
 
+    var config: Config = undefined;
     try parser.parseFile("./examples/example1.toml", &config);
     defer destroyConfig(&config);
 

@@ -4,11 +4,14 @@ const parser = @import("./parser.zig");
 const table = @import("./table.zig");
 const struct_mapping = @import("./struct_mapping.zig");
 const datetime = @import("./datetime.zig");
+const value = @import("./value.zig");
 
 pub const Table = table.Table;
 pub const Date = datetime.Date;
 pub const Time = datetime.Time;
 pub const DateTime = datetime.DateTime;
+pub const Value = value.Value;
+pub const ValueList = value.ValueList;
 
 pub const Position = parser.Position;
 pub const FieldPath = []const []const u8;

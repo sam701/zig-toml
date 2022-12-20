@@ -44,10 +44,10 @@ const Config = struct {
 };
 
 pub fn main() anyerror!void {
-    var config: Config = undefined;
     var parser = toml.Parser(Config).init(allocator);
     defer parser.deinit();
 
+    var config: Config = undefined;
     try parser.parseFile("./examples/example1.toml", &config);
     defer destroyConfig(&config);
 
@@ -55,3 +55,9 @@ pub fn main() anyerror!void {
     std.debug.print("peer0: {s}:{}\n", .{ config.peers[0].host, config.peers[0].port });
 }
 ```
+
+## Error Handling
+TODO
+
+## License
+MIT
