@@ -1,5 +1,6 @@
 master = true
 expires_at = 2023-01-01T19:00:00Z
+description = "Hello TOML\U0001F44B"
 
 [local]
 host = "0.0.0.0"

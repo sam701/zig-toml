@@ -18,16 +18,23 @@ Zig TOML (v1.0.0) parser package.
 * [x] String unicode escapes
 * [ ] Multi-line strings
 * [ ] Literal multi-line strings
-* [ ] Multi-line string trimming
+* [ ] Multi-line string leading space trimming
 * [x] Date
 * [x] Time
 * [x] Date-Time
 * [x] Offset Date-Time
+* [x] Mapping to structs
+* [x] Mapping to slices
+* [ ] Mapping to arrays
+* [x] Mapping to pointers
+* [ ] Mapping to integer and floats with lower bit number than defined by TOML, i.e. `i16`, `f32`.
+* [ ] Mapping to optional fields
 
 ## Example
-See [example1.zig](./examples/example1.zig)
-```zig
+See [`example1.zig`](./examples/example1.zig) for the complete code that parses [`example.toml`](./examples/example1.toml)
 
+Run it with `zig build examples`
+```zig
 // .... 
 
 const Address = struct {
@@ -38,8 +45,9 @@ const Address = struct {
 const Config = struct {
     master: bool,
     expires_at: toml.DateTime,
+    description: []const u8,
 
-    local: Address,
+    local: *Address,
     peers: []const Address,
 };
 
@@ -51,7 +59,7 @@ pub fn main() anyerror!void {
     try parser.parseFile("./examples/example1.toml", &config);
     defer destroyConfig(&config);
 
-    std.debug.print("local address: {s}:{}\n", .{ config.local.host, config.local.port });
+    std.debug.print("{s}\nlocal address: {s}:{}\n", .{ config.description, config.local.host, config.local.port });
     std.debug.print("peer0: {s}:{}\n", .{ config.peers[0].host, config.peers[0].port });
 }
 ```

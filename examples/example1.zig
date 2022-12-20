@@ -12,8 +12,9 @@ const Address = struct {
 const Config = struct {
     master: bool,
     expires_at: toml.DateTime,
+    description: []const u8,
 
-    local: Address,
+    local: *Address,
     peers: []const Address,
 };
 
@@ -25,7 +26,7 @@ pub fn main() anyerror!void {
     try parser.parseFile("./examples/example1.toml", &config);
     defer destroyConfig(&config);
 
-    std.debug.print("local address: {s}:{}\n", .{ config.local.host, config.local.port });
+    std.debug.print("{s}\nlocal address: {s}:{}\n", .{ config.description, config.local.host, config.local.port });
     std.debug.print("peer0: {s}:{}\n", .{ config.peers[0].host, config.peers[0].port });
 }
 
@@ -33,5 +34,7 @@ fn destroyConfig(c: *Config) void {
     allocator.free(c.local.host);
     allocator.free(c.peers[0].host);
     allocator.free(c.peers[1].host);
+    allocator.free(c.description);
+    allocator.destroy(c.local);
     allocator.free(c.peers);
 }
