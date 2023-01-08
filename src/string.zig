@@ -8,97 +8,75 @@ pub fn parse(ctx: *Context) !?[]const u8 {
     return parseSingleLine(ctx);
 }
 
+const Buffer = std.ArrayList(u8);
+
 pub fn parseSingleLine(ctx: *Context) !?[]const u8 {
-    var single_quote = false;
-    parser.consumeString(ctx, "\"") catch {
-        parser.consumeString(ctx, "'") catch return null;
-        single_quote = true;
-    };
-    var sctx = StringContext{
-        .output = std.ArrayList(u8).init(ctx.alloc),
-        .single_quote = single_quote,
-        .single_line = true,
-    };
-    errdefer sctx.output.deinit();
+    var delimiter = parseStringStart(ctx) orelse return null;
+    var output = Buffer.init(ctx.alloc);
+    errdefer output.deinit();
 
     while (ctx.current()) |c| {
-        _ = ctx.next();
-        if (!try charTester(&sctx, c)) {
-            return sctx.output.toOwnedSlice();
+        switch (c) {
+            '\'', '\"' => {
+                if (delimiter.char == c) {
+                    _ = ctx.next();
+                    return output.toOwnedSlice();
+                }
+            },
+            '\r', '\n' => return error.InvalidCharacter,
+            '\\' => if (delimiter.char == '\"') {
+                try parseEscaped(ctx, &output);
+                continue;
+            },
+            else => {},
         }
+        try output.append(c);
+        _ = ctx.next();
     }
     return error.UnexpectedEOF;
 }
 
-const StringContext = struct {
-    output: std.ArrayList(u8),
-    escaped: bool = false,
-    single_quote: bool,
-    single_line: bool,
-    remaining_unicode_chars: u5 = 0,
-    unicode_code_point: u21 = 0,
-};
-
-// Returns true if further chars can be consumed.
-fn charTester(ctx: *StringContext, c: u8) !bool {
-    if (ctx.single_line) {
-        if (c == '\r' or c == '\n') return error.InvalidCharacter;
+fn parseEscaped(ctx: *Context, output: *Buffer) !void {
+    var c = ctx.next() orelse return error.UnexpectedEOF;
+    _ = ctx.next() orelse return error.UnexpectedEOF;
+    switch (c) {
+        'u' => try parseUnicode(ctx, 4, output),
+        'U' => try parseUnicode(ctx, 8, output),
+        'b' => try output.append(0x08),
+        'f' => try output.append(0x0c),
+        't' => try output.append('\t'),
+        'n' => try output.append('\n'),
+        'r' => try output.append('\r'),
+        else => try output.append(c),
     }
-    if (ctx.remaining_unicode_chars > 0) {
-        if (ctx.remaining_unicode_chars > 6) {
-            if (c != '0') return error.InvalidUnicodeCode;
-        } else {
-            var digit: u21 = try std.fmt.charToDigit(c, 16);
-            ctx.unicode_code_point += digit << (4 * (ctx.remaining_unicode_chars - 1));
-        }
-
-        ctx.remaining_unicode_chars -= 1;
-
-        if (ctx.remaining_unicode_chars == 0) {
-            var buf: [4]u8 = undefined;
-            var len = try std.unicode.utf8Encode(ctx.unicode_code_point, buf[0..]);
-            try ctx.output.appendSlice(buf[0..len]);
-        }
-        return true;
-    }
-    if (ctx.escaped) {
-        ctx.escaped = false;
-        ctx.remaining_unicode_chars = switch (c) {
-            'u' => 4,
-            'U' => 8,
-            else => 0,
-        };
-        if (ctx.remaining_unicode_chars == 0) {
-            var cn = switch (c) {
-                'b' => 0x08,
-                'f' => 0x0c,
-                't' => '\t',
-                'n' => '\n',
-                'r' => '\r',
-                else => c,
-            };
-            try ctx.output.append(cn);
-        } else {
-            ctx.unicode_code_point = 0;
-        }
-    } else {
-        if (ctx.single_quote) {
-            if (c == '\'') return false;
-            try ctx.output.append(c);
-        } else {
-            switch (c) {
-                '"' => return false,
-                '\\' => {
-                    ctx.escaped = true;
-                },
-                else => {
-                    try ctx.output.append(c);
-                },
-            }
-        }
-    }
-    return true;
 }
+
+fn parseUnicode(ctx: *Context, size: u8, output: *Buffer) !void {
+    var unicode_buf: [8]u8 = undefined;
+    var ub = unicode_buf[0..size];
+    parser.takeBuffer(ctx, ub) catch return error.InvalidUnicode;
+
+    var codepoint = std.fmt.parseInt(u21, ub, 16) catch return error.InvalidUnicode;
+
+    var buf: [4]u8 = undefined;
+    var len = try std.unicode.utf8Encode(codepoint, buf[0..]);
+    try output.appendSlice(buf[0..len]);
+}
+
+fn parseStringStart(ctx: *Context) ?Delimiter {
+    if (ctx.current()) |c| {
+        if (c == '\'' or c == '\"') {
+            _ = ctx.next();
+            return Delimiter{ .char = c };
+        }
+    }
+    return null;
+}
+
+const Delimiter = struct {
+    char: u8,
+    multiline: bool = false,
+};
 
 test "single quote" {
     var ctx = parser.testInput(
@@ -144,7 +122,7 @@ test "unicode 8" {
 
 test "invalid unicode 1" {
     var ctx = parser.testInput("\"b\\U0101F642c\"");
-    try testing.expectError(error.InvalidUnicodeCode, parse(&ctx));
+    try testing.expectError(error.InvalidUnicode, parse(&ctx));
 }
 
 test "empty" {

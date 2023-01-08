@@ -130,3 +130,11 @@ pub fn consumeString(ctx: *Context, str: []const u8) !void {
         return error.UnexpectedToken;
     }
 }
+
+pub fn takeBuffer(ctx: *Context, buf: []u8) !void {
+    var ix: usize = 0;
+    while (ix < buf.len) : (ix += 1) {
+        buf[ix] = ctx.current() orelse return error.UnexpectedEOF;
+        _ = ctx.next();
+    }
+}

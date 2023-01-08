@@ -1,6 +1,6 @@
 # zig-toml
 
-Zig TOML (v1.0.0) parser package.
+Zig [TOML v1.0.0](https://toml.io/en/v1.0.0) parser.
 
 ## Features
 * [x] Integers, hexadecimal, octal, and binary numbers
