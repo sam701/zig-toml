@@ -11,19 +11,18 @@ pub fn parse(ctx: *Context) !?[]const u8 {
 const Buffer = std.ArrayList(u8);
 
 pub fn parseSingleLine(ctx: *Context) !?[]const u8 {
-    var delimiter = parseStringStart(ctx) orelse return null;
+    var delimiter = parseStringDelimiter(ctx) orelse return null;
     var output = Buffer.init(ctx.alloc);
     errdefer output.deinit();
 
     while (ctx.current()) |c| {
         switch (c) {
             '\'', '\"' => {
-                if (delimiter.char == c) {
-                    _ = ctx.next();
+                if (try parseClosingDelimiter(ctx, &delimiter)) {
                     return output.toOwnedSlice();
                 }
             },
-            '\r', '\n' => return error.InvalidCharacter,
+            '\r', '\n' => if (!delimiter.multiline) return error.InvalidCharacter,
             '\\' => if (delimiter.char == '\"') {
                 try parseEscaped(ctx, &output);
                 continue;
@@ -34,6 +33,23 @@ pub fn parseSingleLine(ctx: *Context) !?[]const u8 {
         _ = ctx.next();
     }
     return error.UnexpectedEOF;
+}
+
+fn parseClosingDelimiter(ctx: *Context, delimiter: *Delimiter) !bool {
+    var c = ctx.current() orelse unreachable;
+    if (delimiter.char != c) return false;
+    if (!delimiter.multiline) {
+        _ = ctx.next();
+        return true;
+    }
+    if (ctx.input.len < 3) return error.UnexpectedEOF;
+    var success = ctx.input[1] == c and ctx.input[2] == c;
+    if (success) {
+        _ = ctx.next();
+        _ = ctx.next();
+        _ = ctx.next();
+    }
+    return success;
 }
 
 fn parseEscaped(ctx: *Context, output: *Buffer) !void {
@@ -47,7 +63,9 @@ fn parseEscaped(ctx: *Context, output: *Buffer) !void {
         't' => try output.append('\t'),
         'n' => try output.append('\n'),
         'r' => try output.append('\r'),
-        else => try output.append(c),
+        '\"' => try output.append('\"'),
+        '\\' => try output.append('\\'),
+        else => return error.InvalidEscape,
     }
 }
 
@@ -63,11 +81,16 @@ fn parseUnicode(ctx: *Context, size: u8, output: *Buffer) !void {
     try output.appendSlice(buf[0..len]);
 }
 
-fn parseStringStart(ctx: *Context) ?Delimiter {
+fn parseStringDelimiter(ctx: *Context) ?Delimiter {
     if (ctx.current()) |c| {
         if (c == '\'' or c == '\"') {
             _ = ctx.next();
-            return Delimiter{ .char = c };
+            var ml = ctx.input.len >= 2 and ctx.input[0] == c and ctx.input[1] == c;
+            if (ml) {
+                _ = ctx.next();
+                _ = ctx.next();
+            }
+            return Delimiter{ .char = c, .multiline = ml };
         }
     }
     return null;
@@ -85,6 +108,37 @@ test "single quote" {
     var str = try parse(&ctx);
     try testing.expect(std.mem.eql(u8, str.?, "\\ab"));
     try testing.expect(ctx.current().? == '=');
+    ctx.alloc.free(str.?);
+}
+
+test "invalid escape" {
+    var ctx = parser.testInput(
+        \\"\ab"=
+    );
+    try testing.expectError(error.InvalidEscape, parse(&ctx));
+}
+
+test "multiline" {
+    var ctx = parser.testInput(
+        \\"""
+        \\  hello
+        \\"nice"
+        \\"""
+    );
+    var str = try parse(&ctx);
+    try testing.expect(std.mem.eql(u8, str.?, "\n  hello\n\"nice\"\n"));
+    ctx.alloc.free(str.?);
+}
+
+test "multiline literal" {
+    var ctx = parser.testInput(
+        \\'''
+        \\  hello
+        \\nice
+        \\'''
+    );
+    var str = try parse(&ctx);
+    try testing.expect(std.mem.eql(u8, str.?, "\n  hello\nnice\n"));
     ctx.alloc.free(str.?);
 }
 
@@ -161,7 +215,5 @@ test "simple escape" {
     ctx.alloc.free(str.?);
 }
 
-// TODO: All other escape sequences not listed above are reserved; if they are used, TOML should produce an error.
-// TODO: multi-line
 // TODO: line ending backslash
-// TODO: multi-line literal string '''aoeu'''
+// TODO: multi-line opening trimming

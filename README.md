@@ -13,8 +13,9 @@ Zig [TOML v1.0.0](https://toml.io/en/v1.0.0) parser.
 * [x] Inline Table
 * [x] Single-line strings
 * [x] String escapes (also unicode)
-* [ ] Multi-line strings
+* [x] Multi-line strings
 * [ ] Multi-line string leading space trimming
+* [ ] Trailing backslash in multi-line strings
 * [x] Date, Time, Date-Time, Offset
 * [x] Mapping to structs
 * [x] Mapping to slices
