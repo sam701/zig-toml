@@ -2,6 +2,8 @@
 
 Zig [TOML v1.0.0](https://toml.io/en/v1.0.0) parser.
 
+This is a top-down LL parser that parses directly into Zig structs.
+
 ## Features
 * [x] Integers, hexadecimal, octal, and binary numbers
 * [x] Floats
