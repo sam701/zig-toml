@@ -1,15 +1,20 @@
 const std = @import("std");
 const parser = @import("./parser.zig");
 const spaces = @import("./spaces.zig");
+const string = @import("./string.zig");
 const testing = std.testing;
 
 fn isBareKeyChar(c: u8) bool {
     return std.ascii.isAlphanumeric(c) or c == '-' or c == '_';
 }
 
-fn parseBareKey(ctx: *parser.Context) parser.String {
-    var v = parser.takeWhile(ctx, isBareKeyChar);
-    return parser.String.fromSlice(v);
+fn parseBareKey(ctx: *parser.Context) !parser.String {
+    if (try string.parseSingleLine(ctx)) |v| {
+        return parser.String{ .content = v, .allocated = true };
+    } else {
+        var v = parser.takeWhile(ctx, isBareKeyChar);
+        return parser.String.fromSlice(v);
+    }
 }
 
 pub const Key = union(enum) {
@@ -45,7 +50,7 @@ fn parseDotted(ctx: *parser.Context, first: parser.String) !Key {
 
         _ = ctx.next();
         spaces.skipSpaces(ctx);
-        var next = parseBareKey(ctx);
+        var next = try parseBareKey(ctx);
         try ar.append(next);
         spaces.skipSpaces(ctx);
     }
@@ -53,7 +58,7 @@ fn parseDotted(ctx: *parser.Context, first: parser.String) !Key {
 }
 
 pub fn parse(ctx: *parser.Context) !Key {
-    var first = parseBareKey(ctx);
+    var first = try parseBareKey(ctx);
     spaces.skipSpaces(ctx);
     if (ctx.current()) |cur| {
         if (cur == '.') {
@@ -82,4 +87,29 @@ test "dotted" {
     key.deinit(ctx.alloc);
 }
 
-// TODO: Quoted keys: aa."pp.tt".cc
+test "quoted key" {
+    var ctx = parser.testInput(
+        \\dd."bb cc" = "aa"
+    );
+    var key = try parse(&ctx);
+    try testing.expect(std.mem.eql(u8, key.dotted[0].content, "dd"));
+    try testing.expect(std.mem.eql(u8, key.dotted[1].content, "bb cc"));
+    key.deinit(ctx.alloc);
+}
+
+test "quoted literal key" {
+    var ctx = parser.testInput(
+        \\dd.'bb cc' = "aa"
+    );
+    var key = try parse(&ctx);
+    try testing.expect(std.mem.eql(u8, key.dotted[0].content, "dd"));
+    try testing.expect(std.mem.eql(u8, key.dotted[1].content, "bb cc"));
+    key.deinit(ctx.alloc);
+}
+
+test "quoted key error" {
+    var ctx = parser.testInput(
+        \\"""bb cc""" = "aa"
+    );
+    try testing.expectError(error.UnexpectedMultilineString, parse(&ctx));
+}

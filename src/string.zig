@@ -5,20 +5,29 @@ const testing = std.testing;
 
 // Returned string is allocated
 pub fn parse(ctx: *Context) !?[]const u8 {
-    return parseSingleLine(ctx);
+    var delimiter = parseOpeningDelimiter(ctx) orelse return null;
+    return parseString(ctx, &delimiter);
 }
 
 const Buffer = std.ArrayList(u8);
 
 pub fn parseSingleLine(ctx: *Context) !?[]const u8 {
-    var delimiter = parseOpeningDelimiter(ctx) orelse return null;
+    var ctx2 = ctx.*;
+    var delimiter = parseOpeningDelimiter(&ctx2) orelse return null;
+    if (delimiter.multiline) return error.UnexpectedMultilineString;
+
+    ctx.* = ctx2;
+    return parseString(ctx, &delimiter);
+}
+
+pub fn parseString(ctx: *Context, delimiter: *const Delimiter) !?[]const u8 {
     var output = Buffer.init(ctx.alloc);
     errdefer output.deinit();
 
     while (ctx.current()) |c| {
         switch (c) {
             '\'', '\"' => {
-                if (try parseClosingDelimiter(ctx, &delimiter)) {
+                if (try parseClosingDelimiter(ctx, delimiter)) {
                     return output.toOwnedSlice();
                 }
             },
@@ -35,7 +44,7 @@ pub fn parseSingleLine(ctx: *Context) !?[]const u8 {
     return error.UnexpectedEOF;
 }
 
-fn parseClosingDelimiter(ctx: *Context, delimiter: *Delimiter) !bool {
+fn parseClosingDelimiter(ctx: *Context, delimiter: *const Delimiter) !bool {
     var c = ctx.current() orelse unreachable;
     if (delimiter.char != c) return false;
     if (!delimiter.multiline) {
@@ -65,6 +74,7 @@ fn parseEscaped(ctx: *Context, output: *Buffer) !void {
         'r' => try output.append('\r'),
         '\"' => try output.append('\"'),
         '\\' => try output.append('\\'),
+        '\r', '\n' => try output.append('\\'),
         else => return error.InvalidEscape,
     }
 }
