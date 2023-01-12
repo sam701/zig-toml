@@ -5,26 +5,28 @@ Zig [TOML v1.0.0](https://toml.io/en/v1.0.0) parser.
 This is a top-down LL parser that parses directly into Zig structs.
 
 ## Features
-* [x] Integers, hexadecimal, octal, and binary numbers
-* [x] Floats
-* [x] Booleans
-* [x] Comments
-* [x] Arrays
-* [x] Tables
-* [x] Array of Tables
-* [x] Inline Table
-* [x] Single-line strings
-* [x] String escapes (also unicode)
-* [x] Multi-line strings
-* [x] Multi-line string leading space trimming
-* [ ] Trailing backslash in multi-line strings
-* [x] Date, Time, Date-Time, Offset
-* [x] Mapping to structs
-* [x] Mapping to slices
-* [ ] Mapping to arrays
-* [x] Mapping to pointers
-* [ ] Mapping to integer and floats with lower bit number than defined by TOML, i.e. `i16`, `f32`.
-* [ ] Mapping to optional fields
+* TOML Syntax
+  * [x] Integers, hexadecimal, octal, and binary numbers
+  * [x] Floats
+  * [x] Booleans
+  * [x] Comments
+  * [x] Arrays
+  * [x] Tables
+  * [x] Array of Tables
+  * [x] Inline Table
+  * [x] Single-line strings
+  * [x] String escapes (also unicode)
+  * [x] Multi-line strings
+  * [x] Multi-line string leading space trimming
+  * [ ] Trailing backslash in multi-line strings
+  * [x] Date, time, date-time, time offset
+* Struct mapping
+  * [x] Mapping to structs
+  * [x] Mapping to slices
+  * [ ] Mapping to arrays
+  * [x] Mapping to pointers
+  * [ ] Mapping to integer and floats with lower bit number than defined by TOML, i.e. `i16`, `f32`.
+  * [ ] Mapping to optional fields
 
 ## Example
 See [`example1.zig`](./examples/example1.zig) for the complete code that parses [`example.toml`](./examples/example1.toml)
