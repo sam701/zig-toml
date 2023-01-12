@@ -11,7 +11,7 @@ pub fn parse(ctx: *Context) !?[]const u8 {
 const Buffer = std.ArrayList(u8);
 
 pub fn parseSingleLine(ctx: *Context) !?[]const u8 {
-    var delimiter = parseStringDelimiter(ctx) orelse return null;
+    var delimiter = parseOpeningDelimiter(ctx) orelse return null;
     var output = Buffer.init(ctx.alloc);
     errdefer output.deinit();
 
@@ -81,7 +81,7 @@ fn parseUnicode(ctx: *Context, size: u8, output: *Buffer) !void {
     try output.appendSlice(buf[0..len]);
 }
 
-fn parseStringDelimiter(ctx: *Context) ?Delimiter {
+fn parseOpeningDelimiter(ctx: *Context) ?Delimiter {
     if (ctx.current()) |c| {
         if (c == '\'' or c == '\"') {
             _ = ctx.next();
@@ -89,6 +89,7 @@ fn parseStringDelimiter(ctx: *Context) ?Delimiter {
             if (ml) {
                 _ = ctx.next();
                 _ = ctx.next();
+                if (c == '\"') skipNewLine(ctx);
             }
             return Delimiter{ .char = c, .multiline = ml };
         }
@@ -96,10 +97,35 @@ fn parseStringDelimiter(ctx: *Context) ?Delimiter {
     return null;
 }
 
+fn skipNewLine(ctx: *Context) void {
+    while (ctx.current()) |c| {
+        if (c != '\n' and c != '\r') break;
+        _ = ctx.next();
+    }
+}
+
 const Delimiter = struct {
     char: u8,
     multiline: bool = false,
 };
+
+test "leading new line" {
+    var ctx = parser.testInput(
+        \\"""
+        \\  hello"""
+    );
+    var str = try parse(&ctx);
+    try testing.expect(std.mem.eql(u8, str.?, "  hello"));
+    ctx.alloc.free(str.?);
+
+    ctx = parser.testInput(
+        \\'''
+        \\  hello'''
+    );
+    str = try parse(&ctx);
+    try testing.expect(std.mem.eql(u8, str.?, "\n  hello"));
+    ctx.alloc.free(str.?);
+}
 
 test "single quote" {
     var ctx = parser.testInput(
@@ -126,7 +152,7 @@ test "multiline" {
         \\"""
     );
     var str = try parse(&ctx);
-    try testing.expect(std.mem.eql(u8, str.?, "\n  hello\n\"nice\"\n"));
+    try testing.expect(std.mem.eql(u8, str.?, "  hello\n\"nice\"\n"));
     ctx.alloc.free(str.?);
 }
 
