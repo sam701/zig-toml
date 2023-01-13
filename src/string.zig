@@ -1,5 +1,6 @@
 const std = @import("std");
 const parser = @import("./parser.zig");
+const spaces = @import("./spaces.zig");
 const Context = parser.Context;
 const testing = std.testing;
 
@@ -33,7 +34,7 @@ pub fn parseString(ctx: *Context, delimiter: *const Delimiter) !?[]const u8 {
             },
             '\r', '\n' => if (!delimiter.multiline) return error.InvalidCharacter,
             '\\' => if (delimiter.char == '\"') {
-                try parseEscaped(ctx, &output);
+                try parseEscaped(ctx, delimiter, &output);
                 continue;
             },
             else => {},
@@ -61,7 +62,7 @@ fn parseClosingDelimiter(ctx: *Context, delimiter: *const Delimiter) !bool {
     return success;
 }
 
-fn parseEscaped(ctx: *Context, output: *Buffer) !void {
+fn parseEscaped(ctx: *Context, delimiter: *const Delimiter, output: *Buffer) !void {
     var c = ctx.next() orelse return error.UnexpectedEOF;
     _ = ctx.next() orelse return error.UnexpectedEOF;
     switch (c) {
@@ -74,7 +75,13 @@ fn parseEscaped(ctx: *Context, output: *Buffer) !void {
         'r' => try output.append('\r'),
         '\"' => try output.append('\"'),
         '\\' => try output.append('\\'),
-        '\r', '\n' => try output.append('\\'),
+        '\r', '\n' => {
+            if (delimiter.multiline) {
+                spaces.skipSpacesAndLineBreaks(ctx);
+            } else {
+                return error.InvalidCharacter;
+            }
+        },
         else => return error.InvalidEscape,
     }
 }
@@ -145,6 +152,30 @@ test "single quote" {
     try testing.expect(std.mem.eql(u8, str.?, "\\ab"));
     try testing.expect(ctx.current().? == '=');
     ctx.alloc.free(str.?);
+}
+
+test "trailing backslash" {
+    var ctx = parser.testInput(
+        \\"""\
+        \\  hello"""
+    );
+    var str = try parse(&ctx);
+    try testing.expect(std.mem.eql(u8, str.?, "hello"));
+    ctx.alloc.free(str.?);
+
+    ctx = parser.testInput(
+        \\'''\
+        \\  hello'''
+    );
+    str = try parse(&ctx);
+    try testing.expect(std.mem.eql(u8, str.?, "\\\n  hello"));
+    ctx.alloc.free(str.?);
+
+    ctx = parser.testInput(
+        \\"\
+        \\  hello"
+    );
+    try testing.expectError(error.InvalidCharacter, parse(&ctx));
 }
 
 test "invalid escape" {

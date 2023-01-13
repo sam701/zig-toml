@@ -18,7 +18,7 @@ This is a top-down LL parser that parses directly into Zig structs.
   * [x] String escapes (also unicode)
   * [x] Multi-line strings
   * [x] Multi-line string leading space trimming
-  * [ ] Trailing backslash in multi-line strings
+  * [x] Trailing backslash in multi-line strings
   * [x] Date, time, date-time, time offset
 * Struct mapping
   * [x] Mapping to structs
