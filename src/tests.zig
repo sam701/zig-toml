@@ -36,6 +36,7 @@ test "parse into struct" {
     };
     const Aa = struct {
         aa: i64,
+        aa2: i8,
         bb: []const u8,
         b1: bool,
         cc: []i64,
@@ -47,6 +48,8 @@ test "parse into struct" {
         p1: P1,
         pt1: *T1,
         f1: f64,
+        f1a: f16,
+        f1b: f16,
         f2: f64,
         d1: datetime.Date,
         ti1: datetime.Time,
@@ -60,9 +63,12 @@ test "parse into struct" {
     try p.parseFile("./test/doc1.toml.txt", &aa);
 
     try testing.expect(aa.aa == 34);
+    try testing.expect(aa.aa2 == 50);
     try testing.expect(std.mem.eql(u8, aa.bb, "abcЖ"));
     try testing.expect(aa.b1 == true);
     try testing.expect(aa.f1 == 125.55);
+    try testing.expect(aa.f1a == 99.5);
+    try testing.expect(aa.f1b == 99.0);
     try testing.expect(aa.f2 == 125.0);
     try testing.expect(std.meta.eql(aa.d1, datetime.Date{ .year = 2022, .month = 12, .day = 10 }));
     try testing.expect(std.meta.eql(aa.ti1, datetime.Time{ .hour = 9, .minute = 7, .second = 14, .nanosecond = 345678000 }));

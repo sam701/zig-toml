@@ -25,7 +25,7 @@ This is a top-down LL parser that parses directly into Zig structs.
   * [x] Mapping to slices
   * [ ] Mapping to arrays
   * [x] Mapping to pointers
-  * [ ] Mapping to integer and floats with lower bit number than defined by TOML, i.e. `i16`, `f32`.
+  * [x] Mapping to integer and floats with lower bit number than defined by TOML, i.e. `i16`, `f32`.
   * [ ] Mapping to optional fields
 
 ## Example
