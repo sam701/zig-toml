@@ -31,8 +31,10 @@ pub fn intoStruct(ctx: *Context, comptime T: type, dest: *T, table: *Table) !voi
                     try setValue(ctx, field_info.field_type, &@field(dest.*, field_info.name), &entry.value);
                     ctx.alloc.free(entry.key);
                 } else {
-                    // TODO: support optional
-                    return error.MissingRequiredField;
+                    if (@typeInfo(field_info.field_type) == .Optional)
+                        @field(dest.*, field_info.name) = null
+                    else
+                        return error.MissingRequiredField;
                 }
                 _ = ctx.field_path.pop();
             }
@@ -43,7 +45,7 @@ pub fn intoStruct(ctx: *Context, comptime T: type, dest: *T, table: *Table) !voi
             }
             table.deinit();
         },
-        else => return error.Unimplemented,
+        else => unreachable,
     }
 }
 
@@ -151,6 +153,9 @@ fn setValue(ctx: *Context, comptime T: type, dest: *T, value: *const Value) !voi
                 },
                 else => return error.InvalidValueType,
             }
+        },
+        .Optional => |tinfo| {
+            try setValue(ctx, tinfo.child, &dest.*.?, value);
         },
         else => return error.NotSupportedFieldType,
     }

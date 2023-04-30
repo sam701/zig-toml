@@ -54,6 +54,8 @@ test "parse into struct" {
         d1: datetime.Date,
         ti1: datetime.Time,
         dt1: datetime.DateTime,
+        o1: ?i32,
+        o2: ?i32,
     };
 
     var p = main.Parser(Aa).init(testing.allocator);
@@ -70,6 +72,8 @@ test "parse into struct" {
     try testing.expect(aa.f1a == 99.5);
     try testing.expect(aa.f1b == 99.0);
     try testing.expect(aa.f2 == 125.0);
+    try testing.expect(aa.o1 == null);
+    try testing.expect(aa.o2.? == 45);
     try testing.expect(std.meta.eql(aa.d1, datetime.Date{ .year = 2022, .month = 12, .day = 10 }));
     try testing.expect(std.meta.eql(aa.ti1, datetime.Time{ .hour = 9, .minute = 7, .second = 14, .nanosecond = 345678000 }));
     try testing.expect(std.meta.eql(aa.dt1, datetime.DateTime{
