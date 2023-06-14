@@ -54,7 +54,7 @@ fn parseDotted(ctx: *parser.Context, first: parser.String) !Key {
         try ar.append(next);
         spaces.skipSpaces(ctx);
     }
-    return Key{ .dotted = ar.toOwnedSlice() };
+    return Key{ .dotted = try ar.toOwnedSlice() };
 }
 
 pub fn parse(ctx: *parser.Context) !Key {

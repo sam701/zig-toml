@@ -28,10 +28,10 @@ pub fn intoStruct(ctx: *Context, comptime T: type, dest: *T, table: *Table) !voi
             inline for (info.fields) |field_info| {
                 try ctx.field_path.append(field_info.name);
                 if (table.fetchRemove(field_info.name)) |entry| {
-                    try setValue(ctx, field_info.field_type, &@field(dest.*, field_info.name), &entry.value);
+                    try setValue(ctx, field_info.type, &@field(dest.*, field_info.name), &entry.value);
                     ctx.alloc.free(entry.key);
                 } else {
-                    if (@typeInfo(field_info.field_type) == .Optional)
+                    if (@typeInfo(field_info.type) == .Optional)
                         @field(dest.*, field_info.name) = null
                     else
                         return error.MissingRequiredField;
@@ -132,7 +132,7 @@ fn setValue(ctx: *Context, comptime T: type, dest: *T, value: *const Value) !voi
                         .array => |ar| {
                             var dest_ar = try ctx.alloc.alloc(tinfo.child, ar.items.len);
                             errdefer ctx.alloc.free(dest_ar);
-                            for (ar.items) |_, ix| {
+                            for (ar.items, 0..) |_, ix| {
                                 try setValue(ctx, tinfo.child, &dest_ar[ix], &ar.items[ix]);
                                 // TODO: set path
                             }

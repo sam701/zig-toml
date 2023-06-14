@@ -29,7 +29,7 @@ pub fn parseString(ctx: *Context, delimiter: *const Delimiter) !?[]const u8 {
         switch (c) {
             '\'', '\"' => {
                 if (try parseClosingDelimiter(ctx, delimiter)) {
-                    return output.toOwnedSlice();
+                    return try output.toOwnedSlice();
                 }
             },
             '\r', '\n' => if (!delimiter.multiline) return error.InvalidCharacter,

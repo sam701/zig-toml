@@ -24,7 +24,7 @@ fn handleKeyPair(ctx: *parser.Context, table: *Table, pair: *kv.KeyValuePair) !v
     var chain = pair.key.asChain(&buf);
 
     var current_table: *Table = table;
-    for (chain) |link, ix| {
+    for (chain, 0..) |link, ix| {
         if (ix == chain.len - 1) {
             try setValue(ctx, current_table, link, pair.value);
         } else {
@@ -66,7 +66,7 @@ fn createTable(ctx: *parser.Context, root_table: *Table, key: keypkg.Key, leaf: 
     var chain = key.asChain(&buf);
 
     var current_table = root_table;
-    for (chain) |ckey, ix| {
+    for (chain, 0..) |ckey, ix| {
         var new_array_item = ix == chain.len - 1 and leaf == LeafType.table_array;
         current_table = try tableAdvance(ctx, current_table, ckey, new_array_item);
     }

@@ -73,7 +73,7 @@ pub fn Parser(comptime Target: type) type {
             defer mapping_ctx.deinit();
 
             struct_mapping.intoStruct(&mapping_ctx, Target, dest, &tab) catch |err| {
-                self.error_info = ErrorInfo{ .struct_mapping = mapping_ctx.field_path.toOwnedSlice() };
+                self.error_info = ErrorInfo{ .struct_mapping = try mapping_ctx.field_path.toOwnedSlice() };
                 deinitTableRecursively(&tab);
                 return err;
             };
