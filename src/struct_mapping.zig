@@ -84,7 +84,7 @@ fn setValue(ctx: *Context, comptime T: type, dest: *T, value: *const Value) !voi
         .Int => {
             switch (value.*) {
                 .integer => |x| {
-                    dest.* = @intCast(@TypeOf(dest.*), x);
+                    dest.* = @intCast(x);
                 },
                 else => return error.InvalidValueType,
             }
@@ -92,10 +92,10 @@ fn setValue(ctx: *Context, comptime T: type, dest: *T, value: *const Value) !voi
         .Float => {
             switch (value.*) {
                 .float => |x| {
-                    dest.* = @floatCast(@TypeOf(dest.*), x);
+                    dest.* = @floatCast(x);
                 },
                 .integer => |x| {
-                    dest.* = @intToFloat(@TypeOf(dest.*), x);
+                    dest.* = @floatFromInt(x);
                 },
                 else => return error.InvalidValueType,
             }
