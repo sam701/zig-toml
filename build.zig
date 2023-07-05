@@ -4,6 +4,10 @@ pub fn build(b: *std.Build) void {
     const optimizeOpt = b.standardOptimizeOption(.{});
     const targetOpt = b.standardTargetOptions(.{});
 
+    const module = b.addModule("zig-toml", .{
+        .source_file = std.Build.FileSource.relative("src/main.zig"),
+    });
+
     const main_tests = b.addTest(.{
         .root_source_file = .{ .path = "src/tests.zig" },
         .target = targetOpt,
@@ -14,10 +18,6 @@ pub fn build(b: *std.Build) void {
     test_step.dependOn(&run_tests.step);
 
     // === examples
-    const module = b.createModule(.{
-        .source_file = .{ .path = "src/main.zig" },
-    });
-
     const example1 = b.addExecutable(.{
         .name = "example1",
         .root_source_file = .{ .path = "examples/example1.zig" },
