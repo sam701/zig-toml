@@ -21,6 +21,17 @@ pub const ErrorInfo = union(enum) {
     struct_mapping: FieldPath,
 };
 
+pub fn Parsed(comptime T: type) type {
+    return struct {
+        arena: std.heap.ArenaAllocator,
+        value: T,
+
+        pub fn deinit(self: @This()) void {
+            self.arena.deinit();
+        }
+    };
+}
+
 pub fn Parser(comptime Target: type) type {
     return struct {
         const Self = @This();
@@ -55,28 +66,32 @@ pub fn Parser(comptime Target: type) type {
             return self.parseString(content, dest);
         }
 
-        pub fn parseString(self: *Self, input: []const u8, dest: *Target) !void {
+        pub fn parseString(self: *Self, input: []const u8) !Parsed(Target) {
+            var arena = std.heap.ArenaAllocator.init(self.alloc);
+            errdefer arena.deinit();
+            const alloc = arena.allocator();
             var ctx = parser.Context{
                 .input = input,
-                .alloc = self.alloc,
+                .alloc = alloc,
             };
             var tab = table.parseRootTable(&ctx) catch |err| {
                 self.error_info = ErrorInfo{ .parse = ctx.position };
                 return err;
             };
             if (Target == Table) {
-                dest.* = tab;
-                return;
+                return .{ .arena = arena, .value = tab };
             }
 
-            var mapping_ctx = struct_mapping.Context.init(self.alloc);
-            defer mapping_ctx.deinit();
+            var mapping_ctx = struct_mapping.Context.init(alloc);
+            // defer mapping_ctx.deinit();
 
-            struct_mapping.intoStruct(&mapping_ctx, Target, dest, &tab) catch |err| {
-                self.error_info = ErrorInfo{ .struct_mapping = try mapping_ctx.field_path.toOwnedSlice() };
-                deinitTableRecursively(&tab);
+            var dest: Target = undefined;
+            struct_mapping.intoStruct(&mapping_ctx, Target, &dest, &tab) catch |err| {
+                self.error_info = ErrorInfo{ .struct_mapping = try self.alloc.dupe([]const u8, mapping_ctx.field_path.items) };
+                // deinitTableRecursively(&tab);
                 return err;
             };
+            return .{ .arena = arena, .value = dest };
         }
     };
 }
