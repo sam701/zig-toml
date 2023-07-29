@@ -22,6 +22,7 @@ This is a top-down LL parser that parses directly into Zig structs.
   * [x] Date, time, date-time, time offset
 * Struct mapping
   * [x] Mapping to structs
+  * [x] Mapping to enums
   * [x] Mapping to slices
   * [ ] Mapping to arrays
   * [x] Mapping to pointers
