@@ -56,14 +56,14 @@ pub fn Parser(comptime Target: type) type {
             }
         }
 
-        pub fn parseFile(self: *Self, filename: []const u8, dest: *Target) !void {
+        pub fn parseFile(self: *Self, filename: []const u8) !Parsed(Target) {
             const file = try std.fs.cwd().openFile(filename, .{});
             defer file.close();
 
             var content = try file.readToEndAlloc(self.alloc, 1024 * 1024 * 1024);
             defer self.alloc.free(content);
 
-            return self.parseString(content, dest);
+            return self.parseString(content);
         }
 
         pub fn parseString(self: *Self, input: []const u8) !Parsed(Target) {
