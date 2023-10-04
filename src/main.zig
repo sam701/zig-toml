@@ -101,5 +101,3 @@ pub fn Parser(comptime Target: type) type {
         }
     };
 }
-
-pub const deinitTableRecursively = table.deinitTableRecursively;
