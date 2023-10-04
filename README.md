@@ -54,10 +54,10 @@ pub fn main() anyerror!void {
     var parser = toml.Parser(Config).init(allocator);
     defer parser.deinit();
 
-    var config: Config = undefined;
-    try parser.parseFile("./examples/example1.toml", &config);
-    defer destroyConfig(&config);
+    var result = try parser.parseFile("./examples/example1.toml");
+    defer result.deinit();
 
+    var config = result.value;
     std.debug.print("{s}\nlocal address: {s}:{}\n", .{ config.description, config.local.host, config.local.port });
     std.debug.print("peer0: {s}:{}\n", .{ config.peers[0].host, config.peers[0].port });
 }
