@@ -29,12 +29,3 @@ pub fn main() anyerror!void {
     std.debug.print("{s}\nlocal address: {s}:{}\n", .{ config.description, config.local.host, config.local.port });
     std.debug.print("peer0: {s}:{}\n", .{ config.peers[0].host, config.peers[0].port });
 }
-
-fn destroyConfig(c: *Config) void {
-    allocator.free(c.local.host);
-    allocator.free(c.peers[0].host);
-    allocator.free(c.peers[1].host);
-    allocator.free(c.description);
-    allocator.destroy(c.local);
-    allocator.free(c.peers);
-}

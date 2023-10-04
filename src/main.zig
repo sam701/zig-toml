@@ -71,6 +71,8 @@ pub fn Parser(comptime Target: type) type {
         }
 
         pub fn parseString(self: *Self, input: []const u8) !Parsed(Target) {
+            self.free_error_info();
+
             var arena = std.heap.ArenaAllocator.init(self.alloc);
             errdefer arena.deinit();
             const alloc = arena.allocator();
