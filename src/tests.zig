@@ -35,6 +35,10 @@ test "parse into struct" {
     const P1 = struct {
         p2: []P2,
     };
+    const E1 = enum {
+        EnumValue1,
+        EnumValue2,
+    };
     const Aa = struct {
         aa: i64,
         aa2: i8,
@@ -57,6 +61,7 @@ test "parse into struct" {
         dt1: datetime.DateTime,
         o1: ?i32,
         o2: ?i32,
+        e1: E1,
     };
 
     var p = main.Parser(Aa).init(testing.allocator);
@@ -106,6 +111,7 @@ test "parse into struct" {
     try testing.expect(aa.p1.p2[1].t1.v1 == 50);
 
     try testing.expect(aa.pt1.v1 == 102);
+    try testing.expectEqual(E1.EnumValue1, aa.e1);
 }
 
 test "deinit table" {
