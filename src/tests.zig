@@ -8,13 +8,14 @@ test "full" {
     var p = main.Parser(main.Table).init(testing.allocator);
     defer p.deinit();
 
-    var m: main.Table = undefined;
-    try p.parseString(
+    const parsed = try p.parseString(
         \\  aa = "a1"
         \\
         \\    bb = 33
-    , &m);
-    defer main.deinitTableRecursively(&m);
+    );
+    defer parsed.deinit();
+    const m = parsed.value;
+
     try testing.expect(m.count() == 2);
     try testing.expect(std.mem.eql(u8, m.get("aa").?.string, "a1"));
     try testing.expect(m.get("bb").?.integer == 33);
@@ -61,8 +62,9 @@ test "parse into struct" {
     var p = main.Parser(Aa).init(testing.allocator);
     defer p.deinit();
 
-    var aa: Aa = undefined;
-    try p.parseFile("./test/doc1.toml.txt", &aa);
+    const parsed = try p.parseFile("./test/doc1.toml.txt");
+    var aa: Aa = parsed.value;
+    defer parsed.deinit();
 
     try testing.expect(aa.aa == 34);
     try testing.expect(aa.aa2 == 50);
@@ -104,21 +106,13 @@ test "parse into struct" {
     try testing.expect(aa.p1.p2[1].t1.v1 == 50);
 
     try testing.expect(aa.pt1.v1 == 102);
-
-    testing.allocator.free(aa.bb);
-    testing.allocator.free(aa.cc);
-    testing.allocator.free(aa.dd[0]);
-    testing.allocator.free(aa.dd[1]);
-    testing.allocator.free(aa.dd);
-    testing.allocator.free(aa.p1.p2);
-    testing.allocator.destroy(aa.pt1);
 }
 
 test "deinit table" {
     var p = main.Parser(main.Table).init(testing.allocator);
     defer p.deinit();
 
-    var tab: main.Table = undefined;
-    try p.parseFile("./test/doc1.toml.txt", &tab);
-    main.deinitTableRecursively(&tab);
+    const parsed = try p.parseFile("./test/doc1.toml.txt");
+    _ = parsed.value;
+    defer parsed.deinit();
 }

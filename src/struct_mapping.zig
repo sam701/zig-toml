@@ -157,6 +157,21 @@ fn setValue(ctx: *Context, comptime T: type, dest: *T, value: *const Value) !voi
         .Optional => |tinfo| {
             try setValue(ctx, tinfo.child, &dest.*.?, value);
         },
+        .Enum => |tinfo| {
+            switch (value.*) {
+                .string => |s| {
+                    inline for (tinfo.fields) |field| {
+                        if (std.mem.eql(u8, field.name, s)) {
+                            dest.* = @enumFromInt(field.value);
+                            break;
+                        }
+                    } else {
+                        return error.InvalidValueType;
+                    }
+                },
+                else => return error.InvalidValueType,
+            }
+        },
         else => return error.NotSupportedFieldType,
     }
 }

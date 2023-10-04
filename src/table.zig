@@ -182,6 +182,7 @@ pub fn parseInlineTable(ctx: *parser.Context) !?*Table {
     return table;
 }
 
+/// Deprecated: use `Parsed(Target).deinit` instead
 pub fn deinitTableRecursively(table: *Table) void {
     var it = table.iterator();
     while (it.next()) |entry| {

@@ -21,6 +21,17 @@ pub const ErrorInfo = union(enum) {
     struct_mapping: FieldPath,
 };
 
+pub fn Parsed(comptime T: type) type {
+    return struct {
+        arena: std.heap.ArenaAllocator,
+        value: T,
+
+        pub fn deinit(self: @This()) void {
+            self.arena.deinit();
+        }
+    };
+}
+
 pub fn Parser(comptime Target: type) type {
     return struct {
         const Self = @This();
@@ -35,6 +46,10 @@ pub fn Parser(comptime Target: type) type {
         }
 
         pub fn deinit(self: *Self) void {
+            self.free_error_info();
+        }
+
+        fn free_error_info(self: *Self) void {
             if (self.error_info) |einfo| {
                 switch (einfo) {
                     .struct_mapping => |field_path| {
@@ -45,38 +60,42 @@ pub fn Parser(comptime Target: type) type {
             }
         }
 
-        pub fn parseFile(self: *Self, filename: []const u8, dest: *Target) !void {
+        pub fn parseFile(self: *Self, filename: []const u8) !Parsed(Target) {
             const file = try std.fs.cwd().openFile(filename, .{});
             defer file.close();
 
             var content = try file.readToEndAlloc(self.alloc, 1024 * 1024 * 1024);
             defer self.alloc.free(content);
 
-            return self.parseString(content, dest);
+            return self.parseString(content);
         }
 
-        pub fn parseString(self: *Self, input: []const u8, dest: *Target) !void {
+        pub fn parseString(self: *Self, input: []const u8) !Parsed(Target) {
+            var arena = std.heap.ArenaAllocator.init(self.alloc);
+            errdefer arena.deinit();
+            const alloc = arena.allocator();
             var ctx = parser.Context{
                 .input = input,
-                .alloc = self.alloc,
+                .alloc = alloc,
             };
             var tab = table.parseRootTable(&ctx) catch |err| {
+                self.free_error_info();
                 self.error_info = ErrorInfo{ .parse = ctx.position };
                 return err;
             };
             if (Target == Table) {
-                dest.* = tab;
-                return;
+                return .{ .arena = arena, .value = tab };
             }
 
-            var mapping_ctx = struct_mapping.Context.init(self.alloc);
-            defer mapping_ctx.deinit();
+            var mapping_ctx = struct_mapping.Context.init(alloc);
 
-            struct_mapping.intoStruct(&mapping_ctx, Target, dest, &tab) catch |err| {
-                self.error_info = ErrorInfo{ .struct_mapping = try mapping_ctx.field_path.toOwnedSlice() };
-                deinitTableRecursively(&tab);
+            var dest: Target = undefined;
+            struct_mapping.intoStruct(&mapping_ctx, Target, &dest, &tab) catch |err| {
+                self.free_error_info();
+                self.error_info = ErrorInfo{ .struct_mapping = try self.alloc.dupe([]const u8, mapping_ctx.field_path.items) }; // i suspect this might leak memory (the outer array is copied, but not inner ones). But it doesn't seem to leak. Strange.
                 return err;
             };
+            return .{ .arena = arena, .value = dest };
         }
     };
 }
