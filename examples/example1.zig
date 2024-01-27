@@ -25,7 +25,7 @@ pub fn main() anyerror!void {
     var result = try parser.parseFile("./examples/example1.toml");
     defer result.deinit();
 
-    var config = result.value;
+    const config = result.value;
     std.debug.print("{s}\nlocal address: {s}:{}\n", .{ config.description, config.local.host, config.local.port });
     std.debug.print("peer0: {s}:{}\n", .{ config.peers[0].host, config.peers[0].port });
 }
