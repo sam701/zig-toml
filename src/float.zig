@@ -7,7 +7,7 @@ pub fn interpret(txt: []const u8) ?f64 {
 }
 
 fn testFloat(str: []const u8, expected: f64) !void {
-    var x = testParse(str);
+    const x = testParse(str);
     try testing.expect(x == expected);
 }
 
@@ -35,6 +35,6 @@ test "float" {
     try std.testing.expect(std.math.isNan(testParse("+nan")));
     try std.testing.expect(std.math.isNan(testParse("-nan")));
 
-    var x = interpret("123e");
+    const x = interpret("123e");
     try testing.expect(x == null);
 }

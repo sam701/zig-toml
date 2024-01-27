@@ -7,7 +7,7 @@ pub fn interpret(txt: []const u8) ?i64 {
 }
 
 fn testInt(str: []const u8, expected: i64) !void {
-    var x = interpret(str).?;
+    const x = interpret(str).?;
     try testing.expect(x == expected);
 }
 

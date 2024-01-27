@@ -17,11 +17,11 @@ pub const KeyValuePair = struct {
 };
 
 pub fn parse(ctx: *parser.Context) !KeyValuePair {
-    var k = try key.parse(ctx);
+    const k = try key.parse(ctx);
     spaces.skipSpaces(ctx);
     try parser.consumeString(ctx, "=");
     spaces.skipSpaces(ctx);
-    var v = try value.parse(ctx);
+    const v = try value.parse(ctx);
     return KeyValuePair{
         .key = k,
         .value = v,

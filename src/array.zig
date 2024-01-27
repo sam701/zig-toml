@@ -17,7 +17,7 @@ pub fn parse(ctx: *parser.Context) !?*value.ValueList {
     errdefer ar.deinit();
 
     while (true) {
-        var val = try value.parse(ctx);
+        const val = try value.parse(ctx);
         try ar.append(val);
         comment.skipSpacesAndComments(ctx);
         parser.consumeString(ctx, ",") catch {};
@@ -35,7 +35,7 @@ test "array" {
         \\"aa", # comment
         \\[5], ]x
     );
-    var ar = (try parse(&ctx)).?;
+    const ar = (try parse(&ctx)).?;
 
     try testing.expect(ar.items.len == 4);
     try testing.expect(ar.items[0].integer == 3);

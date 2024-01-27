@@ -46,14 +46,14 @@ pub fn parseString(ctx: *Context, delimiter: *const Delimiter) !?[]const u8 {
 }
 
 fn parseClosingDelimiter(ctx: *Context, delimiter: *const Delimiter) !bool {
-    var c = ctx.current() orelse unreachable;
+    const c = ctx.current() orelse unreachable;
     if (delimiter.char != c) return false;
     if (!delimiter.multiline) {
         _ = ctx.next();
         return true;
     }
     if (ctx.input.len < 3) return error.UnexpectedEOF;
-    var success = ctx.input[1] == c and ctx.input[2] == c;
+    const success = ctx.input[1] == c and ctx.input[2] == c;
     if (success) {
         _ = ctx.next();
         _ = ctx.next();
@@ -63,7 +63,7 @@ fn parseClosingDelimiter(ctx: *Context, delimiter: *const Delimiter) !bool {
 }
 
 fn parseEscaped(ctx: *Context, delimiter: *const Delimiter, output: *Buffer) !void {
-    var c = ctx.next() orelse return error.UnexpectedEOF;
+    const c = ctx.next() orelse return error.UnexpectedEOF;
     _ = ctx.next() orelse return error.UnexpectedEOF;
     switch (c) {
         'u' => try parseUnicode(ctx, 4, output),
@@ -88,13 +88,13 @@ fn parseEscaped(ctx: *Context, delimiter: *const Delimiter, output: *Buffer) !vo
 
 fn parseUnicode(ctx: *Context, size: u8, output: *Buffer) !void {
     var unicode_buf: [8]u8 = undefined;
-    var ub = unicode_buf[0..size];
+    const ub = unicode_buf[0..size];
     parser.takeBuffer(ctx, ub) catch return error.InvalidUnicode;
 
-    var codepoint = std.fmt.parseInt(u21, ub, 16) catch return error.InvalidUnicode;
+    const codepoint = std.fmt.parseInt(u21, ub, 16) catch return error.InvalidUnicode;
 
     var buf: [4]u8 = undefined;
-    var len = try std.unicode.utf8Encode(codepoint, buf[0..]);
+    const len = try std.unicode.utf8Encode(codepoint, buf[0..]);
     try output.appendSlice(buf[0..len]);
 }
 
@@ -102,7 +102,7 @@ fn parseOpeningDelimiter(ctx: *Context) ?Delimiter {
     if (ctx.current()) |c| {
         if (c == '\'' or c == '\"') {
             _ = ctx.next();
-            var ml = ctx.input.len >= 2 and ctx.input[0] == c and ctx.input[1] == c;
+            const ml = ctx.input.len >= 2 and ctx.input[0] == c and ctx.input[1] == c;
             if (ml) {
                 _ = ctx.next();
                 _ = ctx.next();
@@ -148,7 +148,7 @@ test "single quote" {
     var ctx = parser.testInput(
         \\'\ab'=
     );
-    var str = try parse(&ctx);
+    const str = try parse(&ctx);
     try testing.expect(std.mem.eql(u8, str.?, "\\ab"));
     try testing.expect(ctx.current().? == '=');
     ctx.alloc.free(str.?);
@@ -192,7 +192,7 @@ test "multiline" {
         \\"nice"
         \\"""
     );
-    var str = try parse(&ctx);
+    const str = try parse(&ctx);
     try testing.expect(std.mem.eql(u8, str.?, "  hello\n\"nice\"\n"));
     ctx.alloc.free(str.?);
 }
@@ -204,7 +204,7 @@ test "multiline literal" {
         \\nice
         \\'''
     );
-    var str = try parse(&ctx);
+    const str = try parse(&ctx);
     try testing.expect(std.mem.eql(u8, str.?, "\n  hello\nnice\n"));
     ctx.alloc.free(str.?);
 }
@@ -221,7 +221,7 @@ test "simple" {
     var ctx = parser.testInput(
         \\"abc"=
     );
-    var str = try parse(&ctx);
+    const str = try parse(&ctx);
     try testing.expect(std.mem.eql(u8, str.?, "abc"));
     try testing.expect(ctx.current().? == '=');
     ctx.alloc.free(str.?);
@@ -229,14 +229,14 @@ test "simple" {
 
 test "unicode 4" {
     var ctx = parser.testInput("\"b\\u00E4c\"");
-    var str = try parse(&ctx);
+    const str = try parse(&ctx);
     try testing.expect(std.mem.eql(u8, str.?, "bäc"));
     ctx.alloc.free(str.?);
 }
 
 test "unicode 8" {
     var ctx = parser.testInput("\"b\\U0001F642c\"");
-    var str = try parse(&ctx);
+    const str = try parse(&ctx);
     try testing.expect(std.mem.eql(u8, str.?, "b\u{1f642}c"));
     ctx.alloc.free(str.?);
 }
@@ -250,7 +250,7 @@ test "empty" {
     var ctx = parser.testInput(
         \\abc"
     );
-    var str = try parse(&ctx);
+    const str = try parse(&ctx);
     try testing.expect(str == null);
 }
 
@@ -258,7 +258,7 @@ test "escape" {
     var ctx = parser.testInput(
         \\"a\"bc"
     );
-    var str = try parse(&ctx);
+    const str = try parse(&ctx);
     try testing.expect(std.mem.eql(u8, str.?, "a\"bc"));
     try testing.expect(ctx.current() == null);
     ctx.alloc.free(str.?);
@@ -268,7 +268,7 @@ test "double escape" {
     var ctx = parser.testInput(
         \\"a\\"
     );
-    var str = try parse(&ctx);
+    const str = try parse(&ctx);
     try testing.expect(std.mem.eql(u8, str.?, "a\\"));
     try testing.expect(ctx.current() == null);
     ctx.alloc.free(str.?);
@@ -276,7 +276,7 @@ test "double escape" {
 
 test "simple escape" {
     var ctx = parser.testInput("\"\\b\\t\\r\\n\\fa\"");
-    var str = try parse(&ctx);
+    const str = try parse(&ctx);
     try testing.expect(std.mem.eql(u8, str.?, "\x08\t\r\n\x0ca"));
     try testing.expect(ctx.current() == null);
     ctx.alloc.free(str.?);

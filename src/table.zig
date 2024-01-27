@@ -13,15 +13,15 @@ pub const Table = std.StringHashMap(Value);
 
 fn setValue(ctx: *parser.Context, table: *Table, key: parser.String, value: Value) !void {
     defer key.deinit(ctx.alloc);
-    var copiedKey = try ctx.alloc.alloc(u8, key.content.len);
+    const copiedKey = try ctx.alloc.alloc(u8, key.content.len);
     errdefer ctx.alloc.free(copiedKey);
-    std.mem.copy(u8, copiedKey, key.content);
+    @memcpy(copiedKey, key.content);
     try table.put(copiedKey, value);
 }
 
 fn handleKeyPair(ctx: *parser.Context, table: *Table, pair: *kv.KeyValuePair) !void {
     var buf: [1]parser.String = undefined;
-    var chain = pair.key.asChain(&buf);
+    const chain = pair.key.asChain(&buf);
 
     var current_table: *Table = table;
     for (chain, 0..) |link, ix| {
@@ -63,11 +63,11 @@ fn parseTableContent(ctx: *parser.Context, root_table: *Table) !void {
 
 fn createTable(ctx: *parser.Context, root_table: *Table, key: keypkg.Key, leaf: LeafType) !*Table {
     var buf: [1]parser.String = undefined;
-    var chain = key.asChain(&buf);
+    const chain = key.asChain(&buf);
 
     var current_table = root_table;
     for (chain, 0..) |ckey, ix| {
-        var new_array_item = ix == chain.len - 1 and leaf == LeafType.table_array;
+        const new_array_item = ix == chain.len - 1 and leaf == LeafType.table_array;
         current_table = try tableAdvance(ctx, current_table, ckey, new_array_item);
     }
     key.deinit(ctx.alloc);
@@ -85,10 +85,10 @@ fn tableAdvance(ctx: *parser.Context, table: *Table, key: parser.String, new_arr
             .table => |tab| return tab,
             .array => |ar| {
                 if (new_array_item) {
-                    var new_table = try ctx.alloc.create(Table);
+                    const new_table = try ctx.alloc.create(Table);
                     errdefer ctx.alloc.destroy(new_table);
                     new_table.* = Table.init(ctx.alloc);
-                    var new_value = Value{ .table = new_table };
+                    const new_value = Value{ .table = new_table };
                     try ar.append(new_value);
                     return new_table;
                 } else {
@@ -101,7 +101,7 @@ fn tableAdvance(ctx: *parser.Context, table: *Table, key: parser.String, new_arr
             else => return error.FieldTypeRedifinition,
         }
     } else {
-        var new_table = try ctx.alloc.create(Table);
+        const new_table = try ctx.alloc.create(Table);
         errdefer ctx.alloc.destroy(new_table);
         new_table.* = Table.init(ctx.alloc);
         var new_value = Value{ .table = new_table };
@@ -131,7 +131,7 @@ const table_array_delimiters = Delimiters{ .start = "[[", .end = "]]" };
 fn parseTableHeader(ctx: *parser.Context, delimiters: *const Delimiters) !?keypkg.Key {
     parser.consumeString(ctx, delimiters.start) catch return null;
     spaces.skipSpaces(ctx);
-    var k = try keypkg.parse(ctx);
+    const k = try keypkg.parse(ctx);
     spaces.skipSpaces(ctx);
     try parser.consumeString(ctx, delimiters.end);
     spaces.skipSpaces(ctx);
@@ -160,7 +160,7 @@ test "table header dotted" {
 pub fn parseInlineTable(ctx: *parser.Context) !?*Table {
     parser.consumeString(ctx, "{") catch return null;
 
-    var table = try ctx.alloc.create(Table);
+    const table = try ctx.alloc.create(Table);
     errdefer ctx.alloc.destroy(table);
 
     table.* = Table.init(ctx.alloc);

@@ -12,7 +12,7 @@ fn parseBareKey(ctx: *parser.Context) !parser.String {
     if (try string.parseSingleLine(ctx)) |v| {
         return parser.String{ .content = v, .allocated = true };
     } else {
-        var v = parser.takeWhile(ctx, isBareKeyChar);
+        const v = parser.takeWhile(ctx, isBareKeyChar);
         return parser.String.fromSlice(v);
     }
 }
@@ -50,7 +50,7 @@ fn parseDotted(ctx: *parser.Context, first: parser.String) !Key {
 
         _ = ctx.next();
         spaces.skipSpaces(ctx);
-        var next = try parseBareKey(ctx);
+        const next = try parseBareKey(ctx);
         try ar.append(next);
         spaces.skipSpaces(ctx);
     }
@@ -58,7 +58,7 @@ fn parseDotted(ctx: *parser.Context, first: parser.String) !Key {
 }
 
 pub fn parse(ctx: *parser.Context) !Key {
-    var first = try parseBareKey(ctx);
+    const first = try parseBareKey(ctx);
     spaces.skipSpaces(ctx);
     if (ctx.current()) |cur| {
         if (cur == '.') {
@@ -73,7 +73,7 @@ pub fn parse(ctx: *parser.Context) !Key {
 
 test "bare" {
     var ctx = parser.testInput("abc =");
-    var key = try parse(&ctx);
+    const key = try parse(&ctx);
     try testing.expect(std.mem.eql(u8, key.bare.content, "abc"));
     try testing.expect(ctx.current().? == '=');
 }
