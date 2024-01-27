@@ -8,12 +8,17 @@ on:
     - cron: 15 4 * * *
 jobs:
   build_and_test:
+    strategy:
+      matrix:
+        zig-version: ['0.11.0', 'master']
+
     runs-on: ubuntu-latest
+    name: Test / Zig ${{ matrix.zig-version }}
     steps:
       - uses: actions/checkout@v2
       - uses: goto-bus-stop/setup-zig@v1
         with:
-          version: master
-      - run: zig fmt --check *.zig src/*.zig
+          version: ${{ matrix.zig-version }}
+      - run: zig fmt --check ./*.zig src/*.zig
       - run: zig build test
       - run: zig build
