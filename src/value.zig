@@ -104,7 +104,7 @@ fn isScalarChar(c: u8) bool {
 
 fn parseScalar(ctx: *parser.Context) !?Value {
     var sc = ctx.*;
-    var txt = parser.takeWhile(&sc, isScalarChar);
+    const txt = parser.takeWhile(&sc, isScalarChar);
 
     var val: Value = undefined;
     if (integer.interpret(txt)) |x| {
@@ -119,8 +119,8 @@ fn parseScalar(ctx: *parser.Context) !?Value {
         if (sc.input.len > 9 and sc.input[0] == ' ') { // Space separator between date and time
             var sc2 = sc;
             _ = sc2.next();
-            var txt2 = parser.takeWhile(&sc2, isScalarChar);
-            var to = try datetime.interpretTimeAndOffset(txt2) orelse return error.InvalidTime;
+            const txt2 = parser.takeWhile(&sc2, isScalarChar);
+            const to = try datetime.interpretTimeAndOffset(txt2) orelse return error.InvalidTime;
             val = Value{ .datetime = datetime.DateTime{
                 .date = x,
                 .time = to.time,
@@ -141,7 +141,7 @@ fn parseScalar(ctx: *parser.Context) !?Value {
 
 fn testScalar(txt: []const u8, expected: Value) !void {
     var ctx = parser.testInput(txt);
-    var parsed = try parseScalar(&ctx);
+    const parsed = try parseScalar(&ctx);
     try testing.expect(std.meta.eql(parsed.?, expected));
 }
 
@@ -173,7 +173,7 @@ test "bool" {
     try testing.expect(interpretBool("false").? == false);
 
     var ctx = parser.testInput("true");
-    var val = try parse(&ctx);
+    const val = try parse(&ctx);
     try testing.expect(val.boolean == true);
 }
 

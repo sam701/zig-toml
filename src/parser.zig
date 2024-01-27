@@ -85,14 +85,14 @@ fn isA(x: u8) bool {
 
 test "takeWhile 1" {
     var ctx = testInput("aaabc");
-    var a3 = takeWhile(&ctx, isA);
+    const a3 = takeWhile(&ctx, isA);
     try testing.expect(std.mem.eql(u8, a3, "aaa"));
     try testing.expect(ctx.current().? == 'b');
 }
 
 test "takeWhile 2" {
     var ctx = testInput("aaa");
-    var a3 = takeWhile(&ctx, isA);
+    const a3 = takeWhile(&ctx, isA);
     try testing.expect(std.mem.eql(u8, a3, "aaa"));
     try testing.expect(ctx.current() == null);
 }

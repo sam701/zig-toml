@@ -68,7 +68,7 @@ test "parse into struct" {
     defer p.deinit();
 
     const parsed = try p.parseFile("./test/doc1.toml.txt");
-    var aa: Aa = parsed.value;
+    const aa: Aa = parsed.value;
     defer parsed.deinit();
 
     try testing.expect(aa.aa == 34);

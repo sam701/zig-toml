@@ -42,8 +42,8 @@ pub fn interpretDate(txt: []const u8) DateError!?Date {
 }
 
 test "date" {
-    var d = Date{ .year = 2004, .month = 7, .day = 11 };
-    var d1 = try interpretDate("2004-07-11");
+    const d = Date{ .year = 2004, .month = 7, .day = 11 };
+    const d1 = try interpretDate("2004-07-11");
     try testing.expect(std.meta.eql(d, d1.?));
 
     try testing.expectError(DateError.InvalidYear, interpretDate("0x04-07-11"));
@@ -89,7 +89,7 @@ pub fn interpretTime(txt: []const u8) TimeError!?Time {
 }
 
 fn testTime(str: []const u8, expected: Time) !void {
-    var t = try interpretTime(str);
+    const t = try interpretTime(str);
     try testing.expect(std.meta.eql(t.?, expected));
 }
 
@@ -136,8 +136,8 @@ const OffsetError = error{
 
 fn interpretOffset(txt: []const u8) OffsetError!?i16 {
     if ((txt[0] == '+' or txt[0] == '-') and txt[3] == ':') {
-        var hour = std.fmt.parseInt(i16, txt[0..3], 10) catch return error.InvalidTimeOffset;
-        var minute = std.fmt.parseInt(i16, txt[4..], 10) catch return error.InvalidTimeOffset;
+        const hour = std.fmt.parseInt(i16, txt[0..3], 10) catch return error.InvalidTimeOffset;
+        const minute = std.fmt.parseInt(i16, txt[4..], 10) catch return error.InvalidTimeOffset;
         if (hour > 11 or hour < -11 or minute > 59) return error.InvalidTimeOffset;
         return hour * 60 + std.math.sign(hour) * minute;
     } else return null;
@@ -147,8 +147,8 @@ pub const DateTimeError = DateError || TimeError || OffsetError;
 
 pub fn interpretDateTime(txt: []const u8) DateTimeError!?DateTime {
     if (txt.len < 19 or txt[10] != 'T') return null;
-    var date = try interpretDate(txt[0..10]) orelse return null;
-    var time_with_offset = try interpretTimeAndOffset(txt[11..]) orelse return null;
+    const date = try interpretDate(txt[0..10]) orelse return null;
+    const time_with_offset = try interpretTimeAndOffset(txt[11..]) orelse return null;
     return DateTime{
         .date = date,
         .time = time_with_offset.time,
@@ -157,7 +157,7 @@ pub fn interpretDateTime(txt: []const u8) DateTimeError!?DateTime {
 }
 
 test "datetime" {
-    var dt = try interpretDateTime("2022-12-14T09:14:58.555555-02:30");
+    const dt = try interpretDateTime("2022-12-14T09:14:58.555555-02:30");
     try testing.expect(std.meta.eql(dt.?, DateTime{
         .date = Date{ .year = 2022, .month = 12, .day = 14 },
         .time = Time{ .hour = 9, .minute = 14, .second = 58, .nanosecond = 555555000 },

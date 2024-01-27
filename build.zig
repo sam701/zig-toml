@@ -5,7 +5,7 @@ pub fn build(b: *std.Build) void {
     const targetOpt = b.standardTargetOptions(.{});
 
     const module = b.addModule("zig-toml", .{
-        .source_file = std.Build.FileSource.relative("src/main.zig"),
+        .root_source_file = .{ .path = "src/main.zig" },
     });
 
     const main_tests = b.addTest(.{
@@ -21,9 +21,10 @@ pub fn build(b: *std.Build) void {
     const example1 = b.addExecutable(.{
         .name = "example1",
         .root_source_file = .{ .path = "examples/example1.zig" },
+        .target = targetOpt,
         .optimize = optimizeOpt,
     });
-    example1.addModule("zig-toml", module);
+    example1.root_module.addImport("zig-toml", module);
     b.installArtifact(example1);
 
     const run_example1 = b.addRunArtifact(example1);
