@@ -42,6 +42,7 @@ test "parse into struct" {
     const Aa = struct {
         aa: i64,
         aa2: i8,
+        aa3: i16 = 500,
         bb: []const u8,
         b1: bool,
         cc: []i64,
