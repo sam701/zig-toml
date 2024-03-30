@@ -15,8 +15,8 @@ jobs:
     runs-on: ubuntu-latest
     name: Test / Zig ${{ matrix.zig-version }}
     steps:
-      - uses: actions/checkout@v2
-      - uses: goto-bus-stop/setup-zig@v1
+      - uses: actions/checkout@v4
+      - uses: goto-bus-stop/setup-zig@v2
         with:
           version: ${{ matrix.zig-version }}
       - run: zig fmt --check ./*.zig src/*.zig
