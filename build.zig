@@ -4,16 +4,10 @@ pub fn build(b: *std.Build) void {
     const optimizeOpt = b.standardOptimizeOption(.{});
     const targetOpt = b.standardTargetOptions(.{});
 
-    // FIXME: Delete this when Zig 0.12 is released
-    const is_zig_0_11 = @hasDecl(std.Build, "CreateModuleOptions");
-
-    const module = b.addModule("zig-toml", if (is_zig_0_11)
-        .{ .source_file = .{ .path = "src/main.zig" } }
-    else
-        .{ .root_source_file = .{ .path = "src/main.zig" } });
+    const module = b.addModule("zig-toml", .{ .root_source_file = b.path("src/main.zig") });
 
     const main_tests = b.addTest(.{
-        .root_source_file = .{ .path = "src/tests.zig" },
+        .root_source_file = b.path("src/tests.zig"),
         .target = targetOpt,
         .optimize = optimizeOpt,
     });
@@ -24,15 +18,11 @@ pub fn build(b: *std.Build) void {
     // === examples
     const example1 = b.addExecutable(.{
         .name = "example1",
-        .root_source_file = .{ .path = "examples/example1.zig" },
+        .root_source_file = b.path("examples/example1.zig"),
         .target = targetOpt,
         .optimize = optimizeOpt,
     });
-    if (is_zig_0_11) {
-        example1.addModule("zig-toml", module);
-    } else {
-        example1.root_module.addImport("zig-toml", module);
-    }
+    example1.root_module.addImport("zig-toml", module);
     b.installArtifact(example1);
 
     const run_example1 = b.addRunArtifact(example1);
