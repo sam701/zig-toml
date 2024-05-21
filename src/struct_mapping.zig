@@ -34,7 +34,7 @@ pub fn intoStruct(ctx: *Context, comptime T: type, dest: *T, table: *Table) !voi
                     if (@typeInfo(field_info.type) == .Optional)
                         @field(dest.*, field_info.name) = null
                     else if (field_info.default_value) |defaultValue| {
-                        @field(dest.*, field_info.name) = @as(*field_info.type, @constCast(@alignCast(@ptrCast(defaultValue)))).*;
+                        @field(dest.*, field_info.name) = @as(*const field_info.type, @alignCast(@ptrCast(defaultValue))).*;
                     } else return error.MissingRequiredField;
                 }
                 _ = ctx.field_path.pop();
