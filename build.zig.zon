@@ -1,0 +1,13 @@
+.{
+    .name = "zig-toml",
+    .version = "0.0.0",
+    .paths = .{
+        "build.zig",
+        "build.zig.zon",
+        "examples",
+        "src",
+        "test",
+        "LICENSE",
+        "README.md",
+    },
+}
