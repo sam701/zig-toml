@@ -36,3 +36,13 @@ v1 = 44
 [[p1.p2]]
 [p1.p2.t1]
 v1 = 50
+
+[tab1.a]
+val = 3
+[tab1.b]
+val = "str1"
+
+[tab2.a]
+val = 4
+[tab2.b]
+val = "str2"

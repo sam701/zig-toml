@@ -3,6 +3,7 @@ const testing = std.testing;
 const main = @import("./main.zig");
 const struct_mapping = @import("./struct_mapping.zig");
 const datetime = @import("./datetime.zig");
+const Table = @import("./table.zig").Table;
 
 test "full" {
     var p = main.Parser(main.Table).init(testing.allocator);
@@ -64,6 +65,8 @@ test "parse into struct" {
         o1: ?i32,
         o2: ?i32,
         e1: E1,
+        tab1: Table,
+        tab2: *Table,
     };
 
     var p = main.Parser(Aa).init(testing.allocator);
@@ -116,6 +119,11 @@ test "parse into struct" {
 
     try testing.expect(aa.pt1.v1 == 102);
     try testing.expectEqual(E1.EnumValue1, aa.e1);
+
+    try testing.expectEqual(3, aa.tab1.get("a").?.table.get("val").?.integer);
+    try testing.expectEqualSlices(u8, "str1", aa.tab1.get("b").?.table.get("val").?.string);
+    try testing.expectEqual(4, aa.tab2.get("a").?.table.get("val").?.integer);
+    try testing.expectEqualSlices(u8, "str2", aa.tab2.get("b").?.table.get("val").?.string);
 }
 
 test "deinit table" {

@@ -52,6 +52,10 @@ pub fn intoStruct(ctx: *Context, comptime T: type, dest: *T, table: *Table) !voi
 
 fn setValue(ctx: *Context, comptime T: type, dest: *T, value: *const Value) !void {
     switch (T) {
+        Table => {
+            dest.* = value.table.*;
+            return;
+        },
         datetime.Date => {
             switch (value.*) {
                 .date => |x| {
