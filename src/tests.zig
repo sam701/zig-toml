@@ -126,6 +126,32 @@ test "parse into struct" {
     try testing.expectEqualSlices(u8, "str2", aa.tab2.get("b").?.table.get("val").?.string);
 }
 
+test "optionals (--release=fast)" {
+    const Sub = struct {
+        id: u16,
+        name: []const u8,
+    };
+
+    const Opts = struct {
+        sub: ?Sub,
+    };
+
+    var p = main.Parser(Opts).init(testing.allocator);
+    defer p.deinit();
+
+    const parsed = try p.parseString(
+        \\ [sub]
+        \\ id = 12
+        \\ name = "world"
+    );
+    defer parsed.deinit();
+    const m = parsed.value;
+
+    try std.testing.expect(m.sub != null);
+    try std.testing.expectEqual(12, m.sub.?.id);
+    try std.testing.expectEqualStrings("world", m.sub.?.name);
+}
+
 test "deinit table" {
     var p = main.Parser(main.Table).init(testing.allocator);
     defer p.deinit();

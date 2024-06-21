@@ -160,6 +160,7 @@ fn setValue(ctx: *Context, comptime T: type, dest: *T, value: *const Value) !voi
             }
         },
         .Optional => |tinfo| {
+            dest.* = @as(tinfo.child, undefined);
             try setValue(ctx, tinfo.child, &dest.*.?, value);
         },
         .Enum => |tinfo| {
