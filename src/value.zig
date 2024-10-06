@@ -50,7 +50,9 @@ pub const Value = union(enum) {
     pub fn print(self: *const Value) void {
         switch (self.*) {
             .string => |x| std.debug.print("\"{s}\"", .{x}),
-            .integer, .float => |x| std.debug.print("{}", .{x}),
+            .integer => |x| std.debug.print("{}", .{x}),
+            .float => |x| std.debug.print("{}", .{x}),
+            .boolean => |x| std.debug.print("{}", .{x}),
             .date => |x| std.debug.print("{}-{}-{}", .{ x.year, x.month, x.day }),
             .time => |x| std.debug.print("{}:{}:{}.{}", .{ x.hour, x.minute, x.second, x.nanosecond }),
             .datetime => |x| std.debug.print("{}-{}-{}T{}:{}:{}.{}", .{ x.date.year, x.date.month, x.date.day, x.time.hour, x.time.minute, x.time.second, x.time.nanosecond }),

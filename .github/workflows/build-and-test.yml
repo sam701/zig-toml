@@ -21,4 +21,5 @@ jobs:
           version: ${{ matrix.zig-version }}
       - run: zig fmt --check ./*.zig src/*.zig
       - run: zig build test
+      - run: zig build test --release=fast
       - run: zig build
