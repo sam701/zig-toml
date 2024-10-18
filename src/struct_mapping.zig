@@ -23,6 +23,10 @@ pub const Context = struct {
 };
 
 pub fn intoStruct(ctx: *Context, comptime T: type, dest: *T, table: *Table) !void {
+    if (std.meta.hasFn(T, "tomlIntoStruct")) {
+        dest.* = try T.tomlIntoStruct(ctx, table);
+        return;
+    }
     switch (@typeInfo(T)) {
         .@"struct" => |info| {
             inline for (info.fields) |field_info| {
@@ -180,4 +184,27 @@ fn setValue(ctx: *Context, comptime T: type, dest: *T, value: *const Value) !voi
         },
         else => return error.NotSupportedFieldType,
     }
+}
+
+pub fn HashMap(comptime T: type) type {
+    return struct {
+        map: std.StringHashMap(T),
+
+        pub fn tomlIntoStruct(ctx: *Context, table: *Table) !@This() {
+            var map = std.StringHashMap(T).init(ctx.alloc);
+            errdefer map.deinit();
+
+            var it = table.iterator();
+            while (it.next()) |entry| {
+                var value: T = undefined;
+                try setValue(ctx, T, &value, entry.value_ptr);
+
+                const key: []u8 = try ctx.alloc.alloc(u8, entry.key_ptr.len);
+                @memcpy(key, entry.key_ptr.*);
+                try map.put(key, value);
+            }
+
+            return .{ .map = map };
+        }
+    };
 }

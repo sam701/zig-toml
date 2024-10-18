@@ -12,6 +12,7 @@ pub const Time = datetime.Time;
 pub const DateTime = datetime.DateTime;
 pub const Value = value.Value;
 pub const ValueList = value.ValueList;
+pub const HashMap = struct_mapping.HashMap;
 
 pub const Position = parser.Position;
 pub const FieldPath = []const []const u8;

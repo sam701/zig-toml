@@ -46,3 +46,17 @@ val = "str1"
 val = 4
 [tab2.b]
 val = "str2"
+
+[hm]
+f1 = {aa= 3, bb = 4}
+f2 = {aa = 5, bb = 6}
+[hm.f3]
+aa = 10
+bb = 11
+
+[hm2]
+f1 = {aa= 3, bb = 4}
+f2 = {aa = 5, bb = 6}
+[hm2.f3]
+aa = 10
+bb = 11

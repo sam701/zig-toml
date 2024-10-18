@@ -67,6 +67,8 @@ test "parse into struct" {
         e1: E1,
         tab1: Table,
         tab2: *Table,
+        hm: main.HashMap(Tt),
+        hm2: *main.HashMap(Tt),
     };
 
     var p = main.Parser(Aa).init(testing.allocator);
@@ -124,6 +126,20 @@ test "parse into struct" {
     try testing.expectEqualSlices(u8, "str1", aa.tab1.get("b").?.table.get("val").?.string);
     try testing.expectEqual(4, aa.tab2.get("a").?.table.get("val").?.integer);
     try testing.expectEqualSlices(u8, "str2", aa.tab2.get("b").?.table.get("val").?.string);
+
+    try testing.expectEqual(3, aa.hm.map.get("f1").?.aa);
+    try testing.expectEqual(4, aa.hm.map.get("f1").?.bb);
+    try testing.expectEqual(5, aa.hm.map.get("f2").?.aa);
+    try testing.expectEqual(6, aa.hm.map.get("f2").?.bb);
+    try testing.expectEqual(10, aa.hm.map.get("f3").?.aa);
+    try testing.expectEqual(11, aa.hm.map.get("f3").?.bb);
+
+    try testing.expectEqual(3, aa.hm2.map.get("f1").?.aa);
+    try testing.expectEqual(4, aa.hm2.map.get("f1").?.bb);
+    try testing.expectEqual(5, aa.hm2.map.get("f2").?.aa);
+    try testing.expectEqual(6, aa.hm2.map.get("f2").?.bb);
+    try testing.expectEqual(10, aa.hm2.map.get("f3").?.aa);
+    try testing.expectEqual(11, aa.hm2.map.get("f3").?.bb);
 }
 
 test "optionals (--release=fast)" {
