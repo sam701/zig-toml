@@ -28,14 +28,14 @@ pub fn intoStruct(ctx: *Context, comptime T: type, dest: *T, table: *Table) !voi
         return;
     }
     switch (@typeInfo(T)) {
-        .@"struct" => |info| {
+        .Struct => |info| {
             inline for (info.fields) |field_info| {
                 try ctx.field_path.append(field_info.name);
                 if (table.fetchRemove(field_info.name)) |entry| {
                     try setValue(ctx, field_info.type, &@field(dest.*, field_info.name), &entry.value);
                     ctx.alloc.free(entry.key);
                 } else {
-                    if (@typeInfo(field_info.type) == .optional)
+                    if (@typeInfo(field_info.type) == .Optional)
                         @field(dest.*, field_info.name) = null
                     else if (field_info.default_value) |defaultValue| {
                         @field(dest.*, field_info.name) = @as(*const field_info.type, @alignCast(@ptrCast(defaultValue))).*;
@@ -90,7 +90,7 @@ fn setValue(ctx: *Context, comptime T: type, dest: *T, value: *const Value) !voi
         else => {},
     }
     switch (@typeInfo(T)) {
-        .int => {
+        .Int => {
             switch (value.*) {
                 .integer => |x| {
                     dest.* = @intCast(x);
@@ -98,7 +98,7 @@ fn setValue(ctx: *Context, comptime T: type, dest: *T, value: *const Value) !voi
                 else => return error.InvalidValueType,
             }
         },
-        .float => {
+        .Float => {
             switch (value.*) {
                 .float => |x| {
                     dest.* = @floatCast(x);
@@ -109,7 +109,7 @@ fn setValue(ctx: *Context, comptime T: type, dest: *T, value: *const Value) !voi
                 else => return error.InvalidValueType,
             }
         },
-        .bool => {
+        .Bool => {
             switch (value.*) {
                 .boolean => |b| {
                     dest.* = b;
@@ -117,7 +117,7 @@ fn setValue(ctx: *Context, comptime T: type, dest: *T, value: *const Value) !voi
                 else => return error.InvalidValueType,
             }
         },
-        .pointer => |tinfo| {
+        .Pointer => |tinfo| {
             switch (tinfo.size) {
                 .One => {
                     dest.* = try ctx.alloc.create(tinfo.child);
@@ -154,7 +154,7 @@ fn setValue(ctx: *Context, comptime T: type, dest: *T, value: *const Value) !voi
                 },
             }
         },
-        .@"struct" => {
+        .Struct => {
             switch (value.*) {
                 .table => |tab| {
                     try intoStruct(ctx, T, dest, tab);
@@ -163,11 +163,11 @@ fn setValue(ctx: *Context, comptime T: type, dest: *T, value: *const Value) !voi
                 else => return error.InvalidValueType,
             }
         },
-        .optional => |tinfo| {
+        .Optional => |tinfo| {
             dest.* = @as(tinfo.child, undefined);
             try setValue(ctx, tinfo.child, &dest.*.?, value);
         },
-        .@"enum" => |tinfo| {
+        .Enum => |tinfo| {
             switch (value.*) {
                 .string => |s| {
                     inline for (tinfo.fields) |field| {
