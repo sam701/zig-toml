@@ -37,6 +37,7 @@ pub const SourceAccessor = struct {
             .reader => {
                 buffer = try alloc.alloc(u8, buffer_size);
                 input = buffer.?;
+                input.len = 0;
                 cursor = buffer_size;
             },
         }
@@ -89,24 +90,31 @@ pub const SourceAccessor = struct {
     }
 
     pub fn startValueCapture(self: *Self) void {
-        self.capture_from_ix = self.cursor;
+        if (self.cursor == 0) {
+            // This is the case if this function is called before next().
+            self.capture_from_ix = 0;
+        } else if (self.input.len == 0) {
+            // If this function is called before the buffer has been populated.
+            self.capture_from_ix = 0;
+        } else {
+            self.capture_from_ix = self.cursor - 1;
+        }
     }
 
-    pub fn popCapturedValue(self: *Self) ?Value {
-        const val = if (self.capture) |cap| {
+    pub fn popCapturedValue(self: *Self) Allocator.Error!?Value {
+        var val: ?Value = null;
+        if (self.capture) |*cap| {
             try cap.appendSlice(self.input[self.capture_from_ix.?..self.cursor]);
-            Value{
+            val = Value{
                 .content = try cap.toOwnedSlice(),
                 .allocated = true,
             };
         } else if (self.capture_from_ix) |ix| {
-            Value{
+            val = Value{
                 .content = self.input[ix..self.cursor],
                 .allocated = false,
             };
-        } else {
-            null;
-        };
+        }
 
         self.capture_from_ix = null;
         self.capture = null;
@@ -128,6 +136,69 @@ test "text source: basic" {
     try testing.expectEqual(null, try sa.next());
 }
 
+test "text source: capture in between 1" {
+    var sa = try SourceAccessor.init(Source{ .text = "abcd" }, test_alloc, 4);
+
+    try testing.expectEqual('a', try sa.next());
+    try testing.expectEqual('b', try sa.next());
+    sa.startValueCapture();
+
+    try testing.expectEqual('c', try sa.next());
+
+    var v = try sa.popCapturedValue();
+    try testing.expectEqualSlices(u8, "bc", v.?.content);
+    try testing.expect(!v.?.allocated);
+
+    v = try sa.popCapturedValue();
+    try testing.expect(v == null);
+}
+
+test "text source: capture in between 2" {
+    var sa = try SourceAccessor.init(Source{ .text = "abcdef" }, test_alloc, 3);
+
+    try testing.expectEqual('a', try sa.next());
+    try testing.expectEqual('b', try sa.next());
+    sa.startValueCapture();
+
+    try testing.expectEqual('c', try sa.next());
+    try testing.expectEqual('d', try sa.next());
+
+    var v = try sa.popCapturedValue();
+    try testing.expectEqualSlices(u8, "bcd", v.?.content);
+    try testing.expect(!v.?.allocated);
+
+    v = try sa.popCapturedValue();
+    try testing.expect(v == null);
+}
+
+test "text source: capture beginning" {
+    var sa = try SourceAccessor.init(Source{ .text = "abcd" }, test_alloc, 4);
+
+    sa.startValueCapture();
+    try testing.expectEqual('a', try sa.next());
+    try testing.expectEqual('b', try sa.next());
+    const v = try sa.popCapturedValue();
+
+    try testing.expectEqualSlices(u8, "ab", v.?.content);
+    try testing.expect(!v.?.allocated);
+}
+
+test "text source: capture ending" {
+    var sa = try SourceAccessor.init(Source{ .text = "abcd" }, test_alloc, 4);
+
+    try testing.expectEqual('a', try sa.next());
+    try testing.expectEqual('b', try sa.next());
+    try testing.expectEqual('c', try sa.next());
+    sa.startValueCapture();
+    try testing.expectEqual('d', try sa.next());
+    const v = try sa.popCapturedValue();
+
+    try testing.expectEqualSlices(u8, "cd", v.?.content);
+    try testing.expect(!v.?.allocated);
+
+    try testing.expect(try sa.next() == null);
+}
+
 test "reader source: basic" {
     var s = std.io.fixedBufferStream("abcd");
 
@@ -139,4 +210,79 @@ test "reader source: basic" {
     try testing.expectEqual('c', try sa.next());
     try testing.expectEqual('d', try sa.next());
     try testing.expectEqual(null, try sa.next());
+}
+
+test "reader source: capture in between" {
+    var s = std.io.fixedBufferStream("abcd");
+
+    var sa = try SourceAccessor.init(Source{ .reader = s.reader().any() }, test_alloc, 2);
+    defer sa.deinit();
+
+    try testing.expectEqual('a', try sa.next());
+    try testing.expectEqual('b', try sa.next());
+    sa.startValueCapture();
+
+    try testing.expectEqual('c', try sa.next());
+
+    var v = try sa.popCapturedValue();
+    try testing.expectEqualSlices(u8, "bc", v.?.content);
+    try testing.expect(v.?.allocated);
+    test_alloc.free(v.?.content);
+
+    v = try sa.popCapturedValue();
+    try testing.expect(v == null);
+}
+
+test "reader source: capture beginning" {
+    var s = std.io.fixedBufferStream("abcd");
+
+    var sa = try SourceAccessor.init(Source{ .reader = s.reader().any() }, test_alloc, 2);
+    defer sa.deinit();
+
+    sa.startValueCapture();
+    try testing.expectEqual('a', try sa.next());
+    try testing.expectEqual('b', try sa.next());
+    try testing.expectEqual('c', try sa.next());
+    const v = try sa.popCapturedValue();
+
+    try testing.expectEqualSlices(u8, "abc", v.?.content);
+    try testing.expect(v.?.allocated);
+    test_alloc.free(v.?.content);
+}
+
+test "reader source: capture ending" {
+    var s = std.io.fixedBufferStream("abcd");
+
+    var sa = try SourceAccessor.init(Source{ .reader = s.reader().any() }, test_alloc, 2);
+    defer sa.deinit();
+
+    try testing.expectEqual('a', try sa.next());
+    try testing.expectEqual('b', try sa.next());
+    sa.startValueCapture();
+    try testing.expectEqual('c', try sa.next());
+    try testing.expectEqual('d', try sa.next());
+    const v = try sa.popCapturedValue();
+
+    try testing.expectEqualSlices(u8, "bcd", v.?.content);
+    try testing.expect(v.?.allocated);
+    test_alloc.free(v.?.content);
+}
+
+test "reader source: capture ending 2" {
+    var s = std.io.fixedBufferStream("abcde");
+
+    var sa = try SourceAccessor.init(Source{ .reader = s.reader().any() }, test_alloc, 3);
+    defer sa.deinit();
+
+    try testing.expectEqual('a', try sa.next());
+    try testing.expectEqual('b', try sa.next());
+    try testing.expectEqual('c', try sa.next());
+    sa.startValueCapture();
+    try testing.expectEqual('d', try sa.next());
+    try testing.expectEqual('e', try sa.next());
+    const v = try sa.popCapturedValue();
+
+    try testing.expectEqualSlices(u8, "cde", v.?.content);
+    try testing.expect(v.?.allocated);
+    test_alloc.free(v.?.content);
 }
