@@ -10,7 +10,46 @@ pub const Source = union(enum) {
 pub const Value = struct {
     content: []const u8,
     allocated: bool = false,
+
+    pub fn deinit(self: *@This(), alloc: Allocator) void {
+        if (self.allocated) {
+            alloc.free(self.content);
+            self.content = undefined;
+        }
+    }
+
+    pub fn popAllocated(self: *@This(), alloc: Allocator) Allocator.Error![]const u8 {
+        if (self.allocated) {
+            self.allocated = false;
+            return self.content;
+        } else {
+            return alloc.dupe(u8, self.content);
+        }
+    }
 };
+
+test "value pop 1" {
+    var v = Value{
+        .content = "abc",
+        .allocated = true,
+    };
+
+    const p = try v.popAllocated(test_alloc);
+    try testing.expectEqual(v.content, p);
+}
+
+test "value pop 2" {
+    var v = Value{
+        .content = "abc",
+        .allocated = false,
+    };
+
+    const p = try v.popAllocated(test_alloc);
+    try testing.expectEqualSlices(u8, v.content, p);
+    try testing.expect(v.content.ptr != p.ptr);
+
+    test_alloc.free(p);
+}
 
 pub const SourceAccessor = struct {
     source: Source,
