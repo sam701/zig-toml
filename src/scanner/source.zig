@@ -2,6 +2,10 @@ const std = @import("std");
 const Allocator = std.mem.Allocator;
 const Reader = std.io.AnyReader;
 
+const test_alloc = std.testing.allocator;
+const testing = std.testing;
+const expectEqual = std.testing.expectEqual;
+
 pub const Source = union(enum) {
     text: []const u8,
     reader: Reader,
@@ -35,7 +39,7 @@ test "value pop 1" {
     };
 
     const p = try v.popAllocated(test_alloc);
-    try testing.expectEqual(v.content, p);
+    try expectEqual(v.content, p);
 }
 
 test "value pop 2" {
@@ -60,6 +64,10 @@ pub const SourceAccessor = struct {
     capture_from_ix: ?usize = null,
     capture: ?std.ArrayList(u8) = null,
     allocator: std.mem.Allocator,
+
+    line_number: u64 = 0,
+    line_start_position: usize = 0,
+    total_byte_position: u64 = 0,
 
     pub const Error = Reader.Error;
     const Self = @This();
@@ -124,6 +132,11 @@ pub const SourceAccessor = struct {
 
         std.debug.assert(self.cursor >= 0 and self.cursor < self.input.len);
         const char = self.input[self.cursor];
+        self.total_byte_position += 1;
+        if (char == '\n') {
+            self.line_number += 1;
+            self.line_start_position = self.total_byte_position + 1;
+        }
         self.cursor += 1;
         return char;
     }
@@ -161,28 +174,44 @@ pub const SourceAccessor = struct {
         return val;
     }
 
-    pub fn putBack(self: *Self) void {
+    pub fn prev(self: *Self) void {
         self.cursor -= 1;
+
+        self.total_byte_position -= 1;
+        if (self.input[self.cursor] == '\n') {
+            self.line_number -= 1;
+        }
+    }
+
+    /// Starts at 1.
+    pub fn getLine(self: *const Self) u64 {
+        return self.line_number;
+    }
+    /// Starts at 1.
+    pub fn getColumn(self: *const Self) u64 {
+        return self.total_byte_position -% self.line_start_position;
+    }
+    /// Starts at 0. Measures the byte offset since the start of the input.
+    pub fn getByteOffset(self: *const Self) u64 {
+        return self.total_byte_position;
     }
 };
 
-const test_alloc = std.testing.allocator;
-const testing = std.testing;
 test "text source: basic" {
     var sa = try SourceAccessor.init(Source{ .text = "ab" }, test_alloc, 4);
-    try testing.expectEqual('a', try sa.next());
-    try testing.expectEqual('b', try sa.next());
-    try testing.expectEqual(null, try sa.next());
+    try expectEqual('a', try sa.next());
+    try expectEqual('b', try sa.next());
+    try expectEqual(null, try sa.next());
 }
 
 test "text source: capture in between 1" {
     var sa = try SourceAccessor.init(Source{ .text = "abcd" }, test_alloc, 4);
 
-    try testing.expectEqual('a', try sa.next());
-    try testing.expectEqual('b', try sa.next());
+    try expectEqual('a', try sa.next());
+    try expectEqual('b', try sa.next());
     sa.startValueCapture();
 
-    try testing.expectEqual('c', try sa.next());
+    try expectEqual('c', try sa.next());
 
     var v = try sa.popCapturedValue();
     try testing.expectEqualSlices(u8, "bc", v.?.content);
@@ -195,12 +224,12 @@ test "text source: capture in between 1" {
 test "text source: capture in between 2" {
     var sa = try SourceAccessor.init(Source{ .text = "abcdef" }, test_alloc, 3);
 
-    try testing.expectEqual('a', try sa.next());
-    try testing.expectEqual('b', try sa.next());
+    try expectEqual('a', try sa.next());
+    try expectEqual('b', try sa.next());
     sa.startValueCapture();
 
-    try testing.expectEqual('c', try sa.next());
-    try testing.expectEqual('d', try sa.next());
+    try expectEqual('c', try sa.next());
+    try expectEqual('d', try sa.next());
 
     var v = try sa.popCapturedValue();
     try testing.expectEqualSlices(u8, "bcd", v.?.content);
@@ -214,8 +243,8 @@ test "text source: capture beginning" {
     var sa = try SourceAccessor.init(Source{ .text = "abcd" }, test_alloc, 4);
 
     sa.startValueCapture();
-    try testing.expectEqual('a', try sa.next());
-    try testing.expectEqual('b', try sa.next());
+    try expectEqual('a', try sa.next());
+    try expectEqual('b', try sa.next());
     const v = try sa.popCapturedValue();
 
     try testing.expectEqualSlices(u8, "ab", v.?.content);
@@ -225,11 +254,11 @@ test "text source: capture beginning" {
 test "text source: capture ending" {
     var sa = try SourceAccessor.init(Source{ .text = "abcd" }, test_alloc, 4);
 
-    try testing.expectEqual('a', try sa.next());
-    try testing.expectEqual('b', try sa.next());
-    try testing.expectEqual('c', try sa.next());
+    try expectEqual('a', try sa.next());
+    try expectEqual('b', try sa.next());
+    try expectEqual('c', try sa.next());
     sa.startValueCapture();
-    try testing.expectEqual('d', try sa.next());
+    try expectEqual('d', try sa.next());
     const v = try sa.popCapturedValue();
 
     try testing.expectEqualSlices(u8, "cd", v.?.content);
@@ -244,11 +273,11 @@ test "reader source: basic" {
     var sa = try SourceAccessor.init(Source{ .reader = s.reader().any() }, test_alloc, 2);
     defer sa.deinit();
 
-    try testing.expectEqual('a', try sa.next());
-    try testing.expectEqual('b', try sa.next());
-    try testing.expectEqual('c', try sa.next());
-    try testing.expectEqual('d', try sa.next());
-    try testing.expectEqual(null, try sa.next());
+    try expectEqual('a', try sa.next());
+    try expectEqual('b', try sa.next());
+    try expectEqual('c', try sa.next());
+    try expectEqual('d', try sa.next());
+    try expectEqual(null, try sa.next());
 }
 
 test "reader source: capture in between" {
@@ -257,11 +286,11 @@ test "reader source: capture in between" {
     var sa = try SourceAccessor.init(Source{ .reader = s.reader().any() }, test_alloc, 2);
     defer sa.deinit();
 
-    try testing.expectEqual('a', try sa.next());
-    try testing.expectEqual('b', try sa.next());
+    try expectEqual('a', try sa.next());
+    try expectEqual('b', try sa.next());
     sa.startValueCapture();
 
-    try testing.expectEqual('c', try sa.next());
+    try expectEqual('c', try sa.next());
 
     var v = try sa.popCapturedValue();
     try testing.expectEqualSlices(u8, "bc", v.?.content);
@@ -279,9 +308,9 @@ test "reader source: capture beginning" {
     defer sa.deinit();
 
     sa.startValueCapture();
-    try testing.expectEqual('a', try sa.next());
-    try testing.expectEqual('b', try sa.next());
-    try testing.expectEqual('c', try sa.next());
+    try expectEqual('a', try sa.next());
+    try expectEqual('b', try sa.next());
+    try expectEqual('c', try sa.next());
     const v = try sa.popCapturedValue();
 
     try testing.expectEqualSlices(u8, "abc", v.?.content);
@@ -295,11 +324,11 @@ test "reader source: capture ending" {
     var sa = try SourceAccessor.init(Source{ .reader = s.reader().any() }, test_alloc, 2);
     defer sa.deinit();
 
-    try testing.expectEqual('a', try sa.next());
-    try testing.expectEqual('b', try sa.next());
+    try expectEqual('a', try sa.next());
+    try expectEqual('b', try sa.next());
     sa.startValueCapture();
-    try testing.expectEqual('c', try sa.next());
-    try testing.expectEqual('d', try sa.next());
+    try expectEqual('c', try sa.next());
+    try expectEqual('d', try sa.next());
     const v = try sa.popCapturedValue();
 
     try testing.expectEqualSlices(u8, "bcd", v.?.content);
@@ -313,12 +342,12 @@ test "reader source: capture ending 2" {
     var sa = try SourceAccessor.init(Source{ .reader = s.reader().any() }, test_alloc, 3);
     defer sa.deinit();
 
-    try testing.expectEqual('a', try sa.next());
-    try testing.expectEqual('b', try sa.next());
-    try testing.expectEqual('c', try sa.next());
+    try expectEqual('a', try sa.next());
+    try expectEqual('b', try sa.next());
+    try expectEqual('c', try sa.next());
     sa.startValueCapture();
-    try testing.expectEqual('d', try sa.next());
-    try testing.expectEqual('e', try sa.next());
+    try expectEqual('d', try sa.next());
+    try expectEqual('e', try sa.next());
     const v = try sa.popCapturedValue();
 
     try testing.expectEqualSlices(u8, "cde", v.?.content);
@@ -332,17 +361,42 @@ test "reader source: put back" {
     var sa = try SourceAccessor.init(Source{ .reader = s.reader().any() }, test_alloc, 3);
     defer sa.deinit();
 
-    try testing.expectEqual('a', try sa.next());
-    try testing.expectEqual('b', try sa.next());
-    sa.putBack();
-    try testing.expectEqual('b', try sa.next());
-    try testing.expectEqual('c', try sa.next());
-    sa.putBack();
-    try testing.expectEqual('c', try sa.next());
-    try testing.expectEqual('d', try sa.next());
-    sa.putBack();
-    try testing.expectEqual('d', try sa.next());
-    try testing.expectEqual('e', try sa.next());
-    sa.putBack();
-    try testing.expectEqual('e', try sa.next());
+    try expectEqual('a', try sa.next());
+    try expectEqual('b', try sa.next());
+    sa.prev();
+    try expectEqual('b', try sa.next());
+    try expectEqual('c', try sa.next());
+    sa.prev();
+    try expectEqual('c', try sa.next());
+    try expectEqual('d', try sa.next());
+    sa.prev();
+    try expectEqual('d', try sa.next());
+    try expectEqual('e', try sa.next());
+    sa.prev();
+    try expectEqual('e', try sa.next());
+}
+
+test "diagnostics" {
+    var sa = try SourceAccessor.init(Source{ .text = "ab\ncde" }, test_alloc, 3);
+
+    try expectEqual('a', try sa.next());
+    try expectEqual('b', try sa.next());
+    try expectEqual('\n', try sa.next());
+    sa.prev();
+    try expectEqual('\n', try sa.next());
+    try expectEqual('c', try sa.next());
+    try expectEqual(1, sa.line_number);
+    try expectEqual(4, sa.total_byte_position);
+    try expectEqual(4, sa.line_start_position);
+    try expectEqual(4, sa.cursor);
+    try expectEqual(0, sa.getColumn());
+
+    try expectEqual('d', try sa.next());
+    sa.prev();
+    try expectEqual('d', try sa.next());
+    try expectEqual(1, sa.line_number);
+    try expectEqual(5, sa.total_byte_position);
+    try expectEqual(4, sa.line_start_position);
+    try expectEqual(5, sa.cursor);
+    try expectEqual(1, sa.getColumn());
 }
