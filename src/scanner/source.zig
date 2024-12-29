@@ -325,3 +325,24 @@ test "reader source: capture ending 2" {
     try testing.expect(v.?.allocated);
     test_alloc.free(v.?.content);
 }
+
+test "reader source: put back" {
+    var s = std.io.fixedBufferStream("abcde");
+
+    var sa = try SourceAccessor.init(Source{ .reader = s.reader().any() }, test_alloc, 3);
+    defer sa.deinit();
+
+    try testing.expectEqual('a', try sa.next());
+    try testing.expectEqual('b', try sa.next());
+    sa.putBack();
+    try testing.expectEqual('b', try sa.next());
+    try testing.expectEqual('c', try sa.next());
+    sa.putBack();
+    try testing.expectEqual('c', try sa.next());
+    try testing.expectEqual('d', try sa.next());
+    sa.putBack();
+    try testing.expectEqual('d', try sa.next());
+    try testing.expectEqual('e', try sa.next());
+    sa.putBack();
+    try testing.expectEqual('e', try sa.next());
+}
