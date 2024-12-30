@@ -69,7 +69,7 @@ pub const SourceAccessor = struct {
     line_start_position: usize = 0,
     total_byte_position: u64 = 0,
 
-    pub const Error = Reader.Error;
+    pub const Error = error{ReaderError} || Allocator.Error;
     const Self = @This();
 
     pub fn init(source: Source, alloc: Allocator, buffer_size: usize) Allocator.Error!Self {
@@ -111,22 +111,21 @@ pub const SourceAccessor = struct {
     }
 
     fn ensureBufferLoaded(self: *Self) Error!void {
-        if (self.cursor >= self.input.len) {
-            switch (self.source) {
-                .text => {},
-                .reader => |reader| {
-                    if (self.capture_from_ix) |ix| {
-                        if (self.capture == null)
-                            self.capture = std.ArrayList(u8).init(self.allocator);
-                        try self.capture.?.appendSlice(self.input[ix..]);
-                        self.capture_from_ix = 0;
-                    }
+        if (self.cursor < self.input.len) return;
+        switch (self.source) {
+            .text => {},
+            .reader => |reader| {
+                if (self.capture_from_ix) |ix| {
+                    if (self.capture == null)
+                        self.capture = std.ArrayList(u8).init(self.allocator);
+                    try self.capture.?.appendSlice(self.input[ix..]);
+                    self.capture_from_ix = 0;
+                }
 
-                    const n = try reader.read(self.buffer.?);
-                    self.input = self.buffer.?[0..n];
-                    self.cursor = 0;
-                },
-            }
+                const n = reader.read(self.buffer.?) catch return error.ReaderError;
+                self.input = self.buffer.?[0..n];
+                self.cursor = 0;
+            },
         }
     }
 
@@ -160,8 +159,8 @@ pub const SourceAccessor = struct {
         }
     }
 
-    pub fn popCapturedValue(self: *Self) Allocator.Error!?Value {
-        var val: ?Value = null;
+    pub fn popCapturedValue(self: *Self, trim_chars: usize) Allocator.Error!Value {
+        var val: Value = undefined;
         if (self.capture) |*cap| {
             try cap.appendSlice(self.input[self.capture_from_ix.? .. self.cursor + 1]);
             val = Value{
@@ -173,7 +172,11 @@ pub const SourceAccessor = struct {
                 .content = self.input[ix .. self.cursor + 1],
                 .allocated = false,
             };
+        } else {
+            @panic("startValueCapture was not called");
         }
+
+        val.content = val.content[0 .. val.content.len - trim_chars];
 
         self.capture_from_ix = null;
         self.capture = null;
@@ -211,12 +214,9 @@ test "text source: capture in between 1" {
 
     try expectEqual('c', try sa.next());
 
-    var v = try sa.popCapturedValue();
-    try testing.expectEqualSlices(u8, "bc", v.?.content);
-    try testing.expect(!v.?.allocated);
-
-    v = try sa.popCapturedValue();
-    try testing.expect(v == null);
+    const v = try sa.popCapturedValue(0);
+    try testing.expectEqualSlices(u8, "bc", v.content);
+    try testing.expect(!v.allocated);
 }
 
 test "text source: capture in between 2" {
@@ -229,12 +229,9 @@ test "text source: capture in between 2" {
     try expectEqual('c', try sa.next());
     try expectEqual('d', try sa.next());
 
-    var v = try sa.popCapturedValue();
-    try testing.expectEqualSlices(u8, "bcd", v.?.content);
-    try testing.expect(!v.?.allocated);
-
-    v = try sa.popCapturedValue();
-    try testing.expect(v == null);
+    const v = try sa.popCapturedValue(0);
+    try testing.expectEqualSlices(u8, "bcd", v.content);
+    try testing.expect(!v.allocated);
 }
 
 test "text source: capture beginning" {
@@ -243,10 +240,10 @@ test "text source: capture beginning" {
     sa.startValueCapture();
     try expectEqual('a', try sa.current());
     try expectEqual('b', try sa.next());
-    const v = try sa.popCapturedValue();
+    const v = try sa.popCapturedValue(0);
 
-    try testing.expectEqualSlices(u8, "ab", v.?.content);
-    try testing.expect(!v.?.allocated);
+    try testing.expectEqualSlices(u8, "ab", v.content);
+    try testing.expect(!v.allocated);
 }
 
 test "text source: capture ending" {
@@ -257,10 +254,10 @@ test "text source: capture ending" {
     try expectEqual('c', try sa.next());
     sa.startValueCapture();
     try expectEqual('d', try sa.next());
-    const v = try sa.popCapturedValue();
+    const v = try sa.popCapturedValue(0);
 
-    try testing.expectEqualSlices(u8, "cd", v.?.content);
-    try testing.expect(!v.?.allocated);
+    try testing.expectEqualSlices(u8, "cd", v.content);
+    try testing.expect(!v.allocated);
 
     try testing.expect(try sa.next() == null);
 }
@@ -290,13 +287,10 @@ test "reader source: capture in between" {
 
     try expectEqual('c', try sa.next());
 
-    var v = try sa.popCapturedValue();
-    try testing.expectEqualSlices(u8, "bc", v.?.content);
-    try testing.expect(v.?.allocated);
-    test_alloc.free(v.?.content);
-
-    v = try sa.popCapturedValue();
-    try testing.expect(v == null);
+    const v = try sa.popCapturedValue(0);
+    try testing.expectEqualSlices(u8, "bc", v.content);
+    try testing.expect(v.allocated);
+    test_alloc.free(v.content);
 }
 
 test "reader source: capture beginning" {
@@ -309,11 +303,11 @@ test "reader source: capture beginning" {
     try expectEqual('a', try sa.current());
     try expectEqual('b', try sa.next());
     try expectEqual('c', try sa.next());
-    const v = try sa.popCapturedValue();
+    const v = try sa.popCapturedValue(0);
 
-    try testing.expectEqualSlices(u8, "abc", v.?.content);
-    try testing.expect(v.?.allocated);
-    test_alloc.free(v.?.content);
+    try testing.expectEqualSlices(u8, "abc", v.content);
+    try testing.expect(v.allocated);
+    test_alloc.free(v.content);
 }
 
 test "reader source: capture ending" {
@@ -327,11 +321,11 @@ test "reader source: capture ending" {
     sa.startValueCapture();
     try expectEqual('c', try sa.next());
     try expectEqual('d', try sa.next());
-    const v = try sa.popCapturedValue();
+    const v = try sa.popCapturedValue(0);
 
-    try testing.expectEqualSlices(u8, "bcd", v.?.content);
-    try testing.expect(v.?.allocated);
-    test_alloc.free(v.?.content);
+    try testing.expectEqualSlices(u8, "bcd", v.content);
+    try testing.expect(v.allocated);
+    test_alloc.free(v.content);
 }
 
 test "reader source: capture ending 2" {
@@ -346,11 +340,11 @@ test "reader source: capture ending 2" {
     sa.startValueCapture();
     try expectEqual('d', try sa.next());
     try expectEqual('e', try sa.next());
-    const v = try sa.popCapturedValue();
+    const v = try sa.popCapturedValue(0);
 
-    try testing.expectEqualSlices(u8, "cde", v.?.content);
-    try testing.expect(v.?.allocated);
-    test_alloc.free(v.?.content);
+    try testing.expectEqualSlices(u8, "cde", v.content);
+    try testing.expect(v.allocated);
+    test_alloc.free(v.content);
 }
 
 test "reader source: current" {
