@@ -1,9 +1,9 @@
 const std = @import("std");
-const Scanner = @import("./types.zig").Scanner;
+const Scanner = @import("./main.zig").Scanner;
 const Error = Scanner.Error;
 const Token = Scanner.Token;
 
-const testInput = @import("./types.zig").testInput;
+const testInput = @import("./main.zig").testInput;
 const testing = std.testing;
 
 pub const Delimiter = struct {

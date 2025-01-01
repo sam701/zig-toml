@@ -5,6 +5,7 @@ const SourceAccessor = @import("./source.zig").SourceAccessor;
 const Source = @import("./source.zig").Source;
 
 const string = @import("./string.zig");
+const top = @import("./top.zig");
 
 fn contains(c: u8, allowed: []const u8) bool {
     for (allowed) |a| {
@@ -15,6 +16,7 @@ fn contains(c: u8, allowed: []const u8) bool {
 
 pub const Scanner = struct {
     state: State = .top,
+    state_stack: std.ArrayList(State),
     source_accessor: SourceAccessor,
 
     string_delimiter: ?string.Delimiter = null,
@@ -48,13 +50,17 @@ pub const Scanner = struct {
     };
     pub const State = enum {
         top,
-        key,
-        key_inside_table,
+        top_after_key_chunk,
+        inside_table_after_key_chunk,
 
         string,
         string_escaped,
         string_continued,
     };
+
+    pub fn deinit(self: *Self) void {
+        self.context_stack.deinit();
+    }
 
     fn skipAny(self: *Self, chars: []const u8) Error!void {
         while (try self.source_accessor.current()) |c| {
@@ -65,7 +71,7 @@ pub const Scanner = struct {
 
     pub fn next(self: *Self) Error!Token {
         return switch (self.state) {
-            .top => try self.scanTop(),
+            .top => try top.scan(),
             .string => try string.scanFromBeginning(self),
             .string_escaped => try string.scanEscaped(self),
             .string_continued => try string.scan(self),
@@ -78,39 +84,6 @@ pub const Scanner = struct {
 
     fn skipSpacesAndNewLines(self: *Self) Error!void {
         try self.skipAny(" \t\r\n");
-    }
-
-    fn scanTop(self: *Self) Error!Token {
-        try self.skipSpacesAndNewLines();
-        while (try self.source_accessor.current()) |c| {
-            switch (c) {
-                '#' => {
-                    try self.skipUntilNewLine();
-                    try self.skipSpacesAndNewLines();
-                },
-                '[' => {
-                    self.state = State.key;
-                    switch (try self.mnext()) {
-                        '[' => return Token.array_of_tables_begin,
-                        ' ', '\t' => return Token.table_begin,
-                        _ => {
-                            self.source_accessor.undoLastNext();
-                            return Token.table_begin;
-                        },
-                    }
-                },
-                '"', '\'' => {
-                    self.source_accessor.undoLastNext();
-                    // TODO: implement me
-                    unreachable;
-                },
-                'a'...'z', 'A'...'Z' => {
-                    self.source_accessor.undoLastNext();
-                    // TODO: implement me
-                    unreachable;
-                },
-            }
-        }
     }
 
     fn skipUntilNewLine(self: *Self) Error!void {
@@ -139,8 +112,10 @@ pub const Scanner = struct {
 
 pub fn testInput(state: Scanner.State, txt: []const u8) Scanner {
     const source = Source{ .text = txt };
+    const ss = std.ArrayList(Scanner.State).init(std.testing.allocator);
     return Scanner{
         .state = state,
         .source_accessor = SourceAccessor.init(source, std.testing.allocator, 4) catch unreachable,
+        .state_stack = ss,
     };
 }
