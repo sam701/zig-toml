@@ -49,6 +49,7 @@ test "parse into struct" {
         b1: bool,
         cc: []i64,
         dd: []const []const u8,
+        d2: [3][]const u8,
         t1: Tt,
         t2: Tt,
         t3: Tt,
@@ -105,6 +106,10 @@ test "parse into struct" {
     try testing.expect(aa.dd.len == 2);
     try testing.expect(std.mem.eql(u8, aa.dd[0], "aa"));
     try testing.expect(std.mem.eql(u8, aa.dd[1], "bb"));
+
+    try testing.expectEqualSlices(u8, aa.d2[0], "a1");
+    try testing.expectEqualSlices(u8, aa.d2[1], "a2");
+    try testing.expectEqualSlices(u8, aa.d2[2], "a3");
 
     try testing.expect(aa.t1.aa == 3);
     try testing.expect(aa.t1.bb == 4);

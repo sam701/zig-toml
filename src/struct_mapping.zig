@@ -154,6 +154,17 @@ fn setValue(ctx: *Context, comptime T: type, dest: *T, value: *const Value) !voi
                 },
             }
         },
+        .array => |tinfo| {
+            switch (value.*) {
+                .array => |b| {
+                    if (b.items.len != tinfo.len) return error.InvalidArrayLength;
+                    for (dest, 0..b.items.len) |*x, ix| {
+                        try setValue(ctx, tinfo.child, x, &b.items[ix]);
+                    }
+                },
+                else => return error.InvalidValueType,
+            }
+        },
         .@"struct" => {
             switch (value.*) {
                 .table => |tab| {
