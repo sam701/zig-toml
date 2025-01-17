@@ -13,13 +13,11 @@ pub fn scan(s: *Scanner) Error!Token {
             },
             '[' => {
                 s.state = State.key;
-                switch (try s.mnext()) {
-                    '[' => return Token.array_of_tables_begin,
-                    ' ', '\t' => return Token.table_begin,
-                    _ => {
-                        s.source_accessor.undoLastNext();
-                        return Token.table_begin;
-                    },
+                if (try s.mnext() == '[') {
+                    _ = try s.mnext();
+                    return Token.array_of_tables_begin;
+                } else {
+                    return Token.table_begin;
                 }
             },
             '"', '\'' => {

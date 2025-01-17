@@ -6,6 +6,7 @@ const Source = @import("./source.zig").Source;
 
 const string = @import("./string.zig");
 const top = @import("./top.zig");
+const key = @import("./key.zig");
 
 fn contains(c: u8, allowed: []const u8) bool {
     for (allowed) |a| {
@@ -50,8 +51,9 @@ pub const Scanner = struct {
     };
     pub const State = enum {
         top,
-        top_after_key_chunk,
-        inside_table_after_key_chunk,
+        key,
+        key_chunk_top,
+        key_chunk_table_name,
 
         string,
         string_escaped,
@@ -71,7 +73,9 @@ pub const Scanner = struct {
 
     pub fn next(self: *Self) Error!Token {
         return switch (self.state) {
-            .top => try top.scan(),
+            .top => try top.scan(self),
+            .key => try key.scan(self),
+
             .string => try string.scanFromBeginning(self),
             .string_escaped => try string.scanEscaped(self),
             .string_continued => try string.scan(self),
