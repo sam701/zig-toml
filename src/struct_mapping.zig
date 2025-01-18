@@ -37,7 +37,7 @@ pub fn intoStruct(ctx: *Context, comptime T: type, dest: *T, table: *Table) !voi
                 } else {
                     if (@typeInfo(field_info.type) == .optional)
                         @field(dest.*, field_info.name) = null
-                    else if (field_info.default_value) |defaultValue| {
+                    else if (field_info.default_value_ptr) |defaultValue| {
                         @field(dest.*, field_info.name) = @as(*const field_info.type, @alignCast(@ptrCast(defaultValue))).*;
                     } else return error.MissingRequiredField;
                 }
@@ -119,12 +119,12 @@ fn setValue(ctx: *Context, comptime T: type, dest: *T, value: *const Value) !voi
         },
         .pointer => |tinfo| {
             switch (tinfo.size) {
-                .One => {
+                .one => {
                     dest.* = try ctx.alloc.create(tinfo.child);
                     errdefer ctx.alloc.destroy(dest.*);
                     return setValue(ctx, tinfo.child, dest.*, value);
                 },
-                .Slice => {},
+                .slice => {},
                 else => return error.NotSupportedFieldType,
             }
             switch (tinfo.child) {
