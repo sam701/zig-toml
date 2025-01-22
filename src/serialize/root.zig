@@ -11,7 +11,7 @@ pub fn tomlize(allocator: std.mem.Allocator, obj: anytype, writer: anytype) !voi
 fn serializeStruct(allocator: std.mem.Allocator, value: anytype, writer: anytype) !void {
     const ttype = @TypeOf(value);
     const tinfo = @typeInfo(ttype);
-    if (!std.mem.eql(u8, @tagName(tinfo), "Struct")) @panic("non struct type given to serialize");
+    if (!std.mem.eql(u8, @tagName(tinfo), "struct")) @panic("non struct type given to serialize");
     const fields = comptime getFields(tinfo);
 
     comptime var i: u8 = 0;
@@ -25,10 +25,10 @@ fn serializeStruct(allocator: std.mem.Allocator, value: anytype, writer: anytype
 
 fn serializeSimpleValue(allocator: std.mem.Allocator, t: std.builtin.Type, value: anytype, writer: anytype) !void {
     switch (t) {
-        .Int, .Float => try writer.print("{d}", .{value}),
-        .Bool => if (value) try writer.print("true", .{}) else try writer.print("false", .{}),
-        .Pointer => {
-            if (t.Pointer.child == u8 and t.Pointer.size == .Slice and t.Pointer.is_const) {
+        .int, .float => try writer.print("{d}", .{value}),
+        .bool => if (value) try writer.print("true", .{}) else try writer.print("false", .{}),
+        .pointer => {
+            if (t.pointer.child == u8 and t.pointer.size == .Slice and t.pointer.is_const) {
                 var esc_string = std.ArrayList(u8).init(allocator);
                 defer esc_string.deinit();
                 const string = value;
@@ -55,31 +55,31 @@ fn serializeSimpleValue(allocator: std.mem.Allocator, t: std.builtin.Type, value
 
 fn serializeField(allocator: std.mem.Allocator, t: std.builtin.Type, key: []const u8, value: anytype, writer: anytype) !void {
     switch (t) {
-        .Int, .Float, .Bool => {
+        .int, .float, .bool => {
             try writer.print("{s} = ", .{key});
             try serializeSimpleValue(allocator, t, value, writer);
         },
-        .Pointer => {
+        .pointer => {
             try writer.print("{s} = ", .{key});
-            if (t.Pointer.child == u8 and t.Pointer.size == .Slice and t.Pointer.is_const)
+            if (t.pointer.child == u8 and t.pointer.size == .Slice and t.pointer.is_const)
                 try serializeSimpleValue(allocator, t, value, writer);
         },
-        .Array => {
+        .array => {
             try writer.print("{s} = [ ", .{key});
-            if (t.Array.len != 0) {
+            if (t.array.len != 0) {
                 var i: usize = 0;
-                while (i < t.Array.len - 1) {
+                while (i < t.array.len - 1) {
                     const elm = value[i];
-                    try serializeSimpleValue(allocator, @typeInfo(t.Array.child), elm, writer);
+                    try serializeSimpleValue(allocator, @typeInfo(t.array.child), elm, writer);
                     try writer.print(", ", .{});
                     i += 1;
                 }
             }
-            const elm = value[t.Array.len - 1];
-            try serializeSimpleValue(allocator, @typeInfo(t.Array.child), elm, writer);
+            const elm = value[t.array.len - 1];
+            try serializeSimpleValue(allocator, @typeInfo(t.array.child), elm, writer);
             try writer.print(" ]", .{});
         },
-        .Struct => {
+        .@"struct" => {
             try writer.print("[{s}]\n", .{key});
             try serializeStruct(allocator, value, writer);
         },
@@ -90,7 +90,7 @@ fn serializeField(allocator: std.mem.Allocator, t: std.builtin.Type, key: []cons
 fn getFields(tinfo: std.builtin.Type) std.BoundedArray(std.builtin.Type.StructField, MAX_FIELD_COUNT) {
     comptime var field_names = std.BoundedArray(std.builtin.Type.StructField, MAX_FIELD_COUNT).init(0) catch unreachable;
     comptime var i: u8 = 0;
-    const fields = tinfo.Struct.fields;
+    const fields = tinfo.@"struct".fields;
     if (fields.len > MAX_FIELD_COUNT) @panic("struct field count exceeded MAX_FIELD_COUNT");
     inline while (i < fields.len) {
         const f = fields.ptr[i];
