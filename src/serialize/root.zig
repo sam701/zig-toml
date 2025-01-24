@@ -12,14 +12,10 @@ fn serializeStruct(allocator: std.mem.Allocator, value: anytype, writer: anytype
     const ttype = @TypeOf(value);
     const tinfo = @typeInfo(ttype);
     if (!std.mem.eql(u8, @tagName(tinfo), "struct")) @panic("non struct type given to serialize");
-    const fields = comptime getFields(tinfo);
 
-    comptime var i: u8 = 0;
-    inline while (i < fields.len) {
-        const field = fields.buffer[i];
+    inline for (tinfo.@"struct".fields) |field| {
         try serializeField(allocator, @typeInfo(field.type), field.name, @field(value, field.name), writer);
         _ = try writer.write("\n");
-        i += 1;
     }
 }
 
