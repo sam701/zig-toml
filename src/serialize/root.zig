@@ -128,6 +128,6 @@ test "basic test" {
     var buf: [1024]u8 = undefined;
     var stream = std.io.fixedBufferStream(&buf);
     var writer = stream.writer();
-    try tomlize(Allocator, t, &writer);
+    try serialize(Allocator, t, &writer);
     std.debug.print("\n{s}", .{buf});
 }
