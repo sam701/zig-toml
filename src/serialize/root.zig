@@ -4,7 +4,7 @@ const Allocator = std.testing.allocator;
 
 const MAX_FIELD_COUNT: u8 = 255;
 
-pub fn tomlize(allocator: std.mem.Allocator, obj: anytype, writer: anytype) !void {
+pub fn serialize(allocator: std.mem.Allocator, obj: anytype, writer: anytype) !void {
     try serializeStruct(allocator, obj, writer);
 }
 
