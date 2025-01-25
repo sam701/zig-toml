@@ -25,7 +25,7 @@ fn serializeSimpleValue(allocator: std.mem.Allocator, t: std.builtin.Type, value
         .int, .float => try writer.print("{d}", .{value}),
         .bool => if (value) try writer.print("true", .{}) else try writer.print("false", .{}),
         .pointer => {
-            if (t.pointer.child == u8 and t.pointer.size == .Slice and t.pointer.is_const) {
+            if (t.pointer.child == u8 and t.pointer.size == .slice and t.pointer.is_const) {
                 var esc_string = std.ArrayList(u8).init(allocator);
                 defer esc_string.deinit();
                 const string = value;
@@ -58,7 +58,7 @@ fn serializeField(allocator: std.mem.Allocator, t: std.builtin.Type, key: []cons
         },
         .pointer => {
             try writer.print("{s} = ", .{key});
-            if (t.pointer.child == u8 and t.pointer.size == .Slice and t.pointer.is_const)
+            if (t.pointer.child == u8 and t.pointer.size == .slice and t.pointer.is_const)
                 try serializeSimpleValue(allocator, t, value, writer);
         },
         .array => {
