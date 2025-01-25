@@ -11,7 +11,7 @@ pub fn serialize(allocator: std.mem.Allocator, obj: anytype, writer: anytype) !v
 fn serializeStruct(allocator: std.mem.Allocator, value: anytype, writer: anytype) !void {
     const ttype = @TypeOf(value);
     const tinfo = @typeInfo(ttype);
-    if (!std.mem.eql(u8, @tagName(tinfo), "struct")) @panic("non struct type given to serialize");
+    if (tinfo != .@"struct") @panic("non struct type given to serialize");
 
     inline for (tinfo.@"struct".fields) |field| {
         try serializeField(allocator, @typeInfo(field.type), field.name, @field(value, field.name), writer);
