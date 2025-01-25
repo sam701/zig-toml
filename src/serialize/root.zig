@@ -1,14 +1,15 @@
 const std = @import("std");
 const testing = std.testing;
 const Allocator = std.testing.allocator;
+const AnyWriter = std.io.AnyWriter;
 
 const MAX_FIELD_COUNT: u8 = 255;
 
-pub fn serialize(allocator: std.mem.Allocator, obj: anytype, writer: anytype) !void {
+pub fn serialize(allocator: std.mem.Allocator, obj: anytype, writer: *AnyWriter) !void {
     try serializeStruct(allocator, obj, writer);
 }
 
-fn serializeStruct(allocator: std.mem.Allocator, value: anytype, writer: anytype) !void {
+fn serializeStruct(allocator: std.mem.Allocator, value: anytype, writer: *AnyWriter) !void {
     const ttype = @TypeOf(value);
     const tinfo = @typeInfo(ttype);
     if (tinfo != .@"struct") @panic("non struct type given to serialize");
@@ -19,7 +20,7 @@ fn serializeStruct(allocator: std.mem.Allocator, value: anytype, writer: anytype
     }
 }
 
-fn serializeSimpleValue(allocator: std.mem.Allocator, t: std.builtin.Type, value: anytype, writer: anytype) !void {
+fn serializeSimpleValue(allocator: std.mem.Allocator, t: std.builtin.Type, value: anytype, writer: *AnyWriter) !void {
     switch (t) {
         .int, .float => try writer.print("{d}", .{value}),
         .bool => if (value) try writer.print("true", .{}) else try writer.print("false", .{}),
@@ -49,7 +50,7 @@ fn serializeSimpleValue(allocator: std.mem.Allocator, t: std.builtin.Type, value
     }
 }
 
-fn serializeField(allocator: std.mem.Allocator, t: std.builtin.Type, key: []const u8, value: anytype, writer: anytype) !void {
+fn serializeField(allocator: std.mem.Allocator, t: std.builtin.Type, key: []const u8, value: anytype, writer: *AnyWriter) !void {
     switch (t) {
         .int, .float, .bool => {
             try writer.print("{s} = ", .{key});
@@ -123,7 +124,8 @@ test "basic test" {
 
     var buf: [1024]u8 = undefined;
     var stream = std.io.fixedBufferStream(&buf);
-    var writer = stream.writer();
+    var gwriter = stream.writer();
+    var writer = gwriter.any();
     try serialize(Allocator, t, &writer);
     std.debug.print("\n{s}", .{buf});
 }
