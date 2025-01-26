@@ -36,11 +36,20 @@ fn serializeValue(allocator: Allocator, t: std.builtin.Type, value: anytype, wri
 
                 var curr_pos: usize = 0;
                 while (curr_pos <= string.len) {
-                    const new_pos = std.mem.indexOfAnyPos(u8, string, curr_pos, &.{'\"'}) orelse string.len;
+                    const new_pos = std.mem.indexOfAnyPos(u8, string, curr_pos, &.{ '"', '\n', '\t', '\r', '\\', 0x0C, 0x08 }) orelse string.len;
                     try writer.print("{s}", .{string[curr_pos..new_pos]});
                     if (new_pos != string.len) {
                         _ = try writer.writeByte('\\');
-                        _ = try writer.writeByte(string[new_pos]);
+                        switch (string[new_pos]) {
+                            '"' => _ = try writer.writeByte('"'),
+                            '\n' => _ = try writer.writeByte('n'),
+                            '\t' => _ = try writer.writeByte('t'),
+                            '\r' => _ = try writer.writeByte('r'),
+                            '\\' => _ = try writer.writeByte('\\'),
+                            0x0C => _ = try writer.writeByte('f'),
+                            0x08 => _ = try writer.writeByte('b'),
+                            else => unreachable,
+                        }
                     }
                     curr_pos = new_pos + 1;
                 }
