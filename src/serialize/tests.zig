@@ -149,7 +149,7 @@ test "structs" {
     try testing.expectEqualSlices(u8, result, ba.constSlice());
 }
 
-test "top level structs" {
+test "top level tables" {
     var ba = try std.BoundedArray(u8, 512).init(0);
     var writer = ba.writer().any();
 
@@ -186,6 +186,59 @@ test "top level structs" {
         \\field6 = [ "This", "is", "a", "text", "line" ]
         \\[field7]
         \\field1 = 10
+        \\
+        \\
+    ;
+
+    try serialize(Allocator, t, &writer);
+    try testing.expectEqualSlices(u8, result, ba.constSlice());
+}
+
+test "sub tables" {
+    var ba = try std.BoundedArray(u8, 512).init(0);
+    var writer = ba.writer().any();
+
+    const TestStruct3 = struct {
+        field1: i32,
+    };
+
+    const TestStruct2 = struct {
+        field1: i32,
+        field2: TestStruct3,
+    };
+
+    const TestStruct = struct {
+        field1: i32,
+        field2: []const u8,
+        field3: bool,
+        field4: f64,
+        field5: [5]u8,
+        field6: [5][]const u8,
+        field7: TestStruct2,
+    };
+
+    const t = TestStruct{
+        .field1 = 100,
+        .field2 = "hello world",
+        .field3 = true,
+        .field4 = 3.14,
+        .field5 = [_]u8{ 1, 2, 3, 4, 5 },
+        .field6 = [_][]const u8{ "This", "is", "a", "text", "line" },
+        .field7 = .{ .field1 = 10, .field2 = .{ .field1 = 100 } },
+    };
+
+    const result =
+        \\field1 = 100
+        \\field2 = "hello world"
+        \\field3 = true
+        \\field4 = 3.14
+        \\field5 = [ 1, 2, 3, 4, 5 ]
+        \\field6 = [ "This", "is", "a", "text", "line" ]
+        \\[field7]
+        \\field1 = 10
+        \\[field7.field2]
+        \\field1 = 100
+        \\
         \\
         \\
     ;

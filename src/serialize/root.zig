@@ -3,28 +3,52 @@ const testing = std.testing;
 const AnyWriter = std.io.AnyWriter;
 const Allocator = std.mem.Allocator;
 
+const SerializerState = struct {
+    allocator: Allocator,
+    table_level: std.ArrayList([]const u8),
+
+    const Self = @This();
+
+    fn deinit(self: *Self) void {
+        self.table_level.deinit();
+    }
+};
+
 pub fn serialize(allocator: Allocator, obj: anytype, writer: *AnyWriter) !void {
     const ttype = @TypeOf(obj);
     const tinfo = @typeInfo(ttype);
-    try serializeValue(allocator, tinfo, obj, writer);
+    var state = SerializerState{
+        .allocator = allocator,
+        .table_level = std.ArrayList([]const u8).init(allocator),
+    };
+    defer state.deinit();
+    try serializeValue(&state, tinfo, obj, writer);
 }
 
-fn serializeStruct(allocator: Allocator, value: anytype, writer: *AnyWriter) !void {
+fn serializeStruct(state: *SerializerState, value: anytype, writer: *AnyWriter) !void {
     const ttype = @TypeOf(value);
     const tinfo = @typeInfo(ttype);
     if (tinfo != .@"struct") @panic("non struct type given to serialize");
 
     inline for (tinfo.@"struct".fields) |field| {
-        if (@typeInfo(field.type) == .@"struct")
-            try writer.print("[{s}]\n", .{field.name})
-        else
-            try writer.print("{s} = ", .{field.name});
-        try serializeValue(allocator, @typeInfo(field.type), @field(value, field.name), writer);
+        const ftype = @typeInfo(field.type);
+        if (ftype == .@"struct") {
+            try state.table_level.append(field.name);
+            try writer.writeByte('[');
+            for (0..state.table_level.items.len - 1) |i| {
+                try writer.print("{s}.", .{state.table_level.items[i]});
+            }
+            try writer.print("{s}]\n", .{field.name});
+        } else try writer.print("{s} = ", .{field.name});
+        try serializeValue(state, ftype, @field(value, field.name), writer);
+
+        if (ftype == .@"struct") _ = state.table_level.popOrNull();
+
         _ = try writer.write("\n");
     }
 }
 
-fn serializeValue(allocator: Allocator, t: std.builtin.Type, value: anytype, writer: *AnyWriter) !void {
+fn serializeValue(state: *SerializerState, t: std.builtin.Type, value: anytype, writer: *AnyWriter) !void {
     switch (t) {
         .int, .float, .comptime_int, .comptime_float => try writer.print("{d}", .{value}),
         .bool => if (value) try writer.print("true", .{}) else try writer.print("false", .{}),
@@ -62,17 +86,17 @@ fn serializeValue(allocator: Allocator, t: std.builtin.Type, value: anytype, wri
                 var i: usize = 0;
                 while (i < t.array.len - 1) {
                     const elm = value[i];
-                    try serializeValue(allocator, @typeInfo(t.array.child), elm, writer);
+                    try serializeValue(state, @typeInfo(t.array.child), elm, writer);
                     try writer.print(", ", .{});
                     i += 1;
                 }
             }
             const elm = value[t.array.len - 1];
-            try serializeValue(allocator, @typeInfo(t.array.child), elm, writer);
+            try serializeValue(state, @typeInfo(t.array.child), elm, writer);
             try writer.print(" ]", .{});
         },
         .@"struct" => {
-            try serializeStruct(allocator, value, writer);
+            try serializeStruct(state, value, writer);
         },
         else => {},
     }
