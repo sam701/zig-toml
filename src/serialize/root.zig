@@ -32,6 +32,7 @@ fn serializeStruct(state: *SerializerState, value: anytype, writer: *AnyWriter) 
 
     inline for (tinfo.@"struct".fields) |field| {
         const ftype = @typeInfo(field.type);
+
         if (ftype == .@"struct") {
             try state.table_level.append(field.name);
             try writer.writeByte('[');
@@ -39,12 +40,13 @@ fn serializeStruct(state: *SerializerState, value: anytype, writer: *AnyWriter) 
                 try writer.print("{s}.", .{state.table_level.items[i]});
             }
             try writer.print("{s}]\n", .{field.name});
-        } else try writer.print("{s} = ", .{field.name});
-        try serializeValue(state, ftype, @field(value, field.name), writer);
-
-        if (ftype == .@"struct") _ = state.table_level.popOrNull();
-
-        _ = try writer.write("\n");
+            try serializeValue(state, ftype, @field(value, field.name), writer);
+            _ = state.table_level.popOrNull();
+        } else {
+            try writer.print("{s} = ", .{field.name});
+            try serializeValue(state, ftype, @field(value, field.name), writer);
+            _ = try writer.write("\n");
+        }
     }
 }
 

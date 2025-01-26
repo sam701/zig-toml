@@ -187,7 +187,6 @@ test "top level tables" {
         \\[field7]
         \\field1 = 10
         \\
-        \\
     ;
 
     try serialize(Allocator, t, &writer);
@@ -238,8 +237,6 @@ test "sub tables" {
         \\field1 = 10
         \\[field7.field2]
         \\field1 = 100
-        \\
-        \\
         \\
     ;
 
