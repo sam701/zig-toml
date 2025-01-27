@@ -5,22 +5,26 @@ const Allocator = std.mem.Allocator;
 
 const SerializerState = struct {
     allocator: Allocator,
-    table_level: std.ArrayList([]const u8),
+    table_comp: std.ArrayList([]const u8),
 
     const Self = @This();
 
+    fn init(allocator: Allocator) Self {
+        return Self{
+            .allocator = allocator,
+            .table_comp = std.ArrayList([]const u8).init(allocator),
+        };
+    }
+
     fn deinit(self: *Self) void {
-        self.table_level.deinit();
+        self.table_comp.deinit();
     }
 };
 
 pub fn serialize(allocator: Allocator, obj: anytype, writer: *AnyWriter) !void {
     const ttype = @TypeOf(obj);
     const tinfo = @typeInfo(ttype);
-    var state = SerializerState{
-        .allocator = allocator,
-        .table_level = std.ArrayList([]const u8).init(allocator),
-    };
+    var state = SerializerState.init(allocator);
     defer state.deinit();
     try serializeValue(&state, tinfo, obj, writer);
 }
@@ -33,20 +37,25 @@ fn serializeStruct(state: *SerializerState, value: anytype, writer: *AnyWriter) 
     inline for (tinfo.@"struct".fields) |field| {
         const ftype = @typeInfo(field.type);
 
-        if (ftype == .@"struct") {
-            try state.table_level.append(field.name);
-            try writer.writeByte('[');
-            for (0..state.table_level.items.len - 1) |i| {
-                try writer.print("{s}.", .{state.table_level.items[i]});
-            }
-            try writer.print("{s}]\n", .{field.name});
-            try serializeValue(state, ftype, @field(value, field.name), writer);
-            _ = state.table_level.popOrNull();
-        } else {
+        if (ftype != .@"struct") {
             try writer.print("{s} = ", .{field.name});
             try serializeValue(state, ftype, @field(value, field.name), writer);
             _ = try writer.write("\n");
         }
+    }
+
+    inline for (tinfo.@"struct".fields) |field| {
+        const ftype = @typeInfo(field.type);
+        if (ftype != .@"struct") continue;
+
+        try state.table_comp.append(field.name);
+        try writer.writeByte('[');
+        for (0..state.table_comp.items.len - 1) |i| {
+            try writer.print("{s}.", .{state.table_comp.items[i]});
+        }
+        try writer.print("{s}]\n", .{field.name});
+        try serializeValue(state, ftype, @field(value, field.name), writer);
+        _ = state.table_comp.popOrNull();
     }
 }
 

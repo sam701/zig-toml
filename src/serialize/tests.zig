@@ -170,6 +170,50 @@ test "structs" {
     try testing.expectEqualSlices(u8, result, ba.constSlice());
 }
 
+test "tables follow top level fields" {
+    var ba = try std.BoundedArray(u8, 512).init(0);
+    var writer = ba.writer().any();
+
+    const TestStruct2 = struct {
+        field1: i32,
+    };
+
+    const TestStruct = struct {
+        field1: i32,
+        field2: []const u8,
+        field3: bool,
+        field4: f64,
+        field7: TestStruct2,
+        field5: [5]u8,
+        field6: [5][]const u8,
+    };
+
+    const t = TestStruct{
+        .field1 = 100,
+        .field2 = "hello world",
+        .field3 = true,
+        .field4 = 3.14,
+        .field5 = [_]u8{ 1, 2, 3, 4, 5 },
+        .field6 = [_][]const u8{ "This", "is", "a", "text", "line" },
+        .field7 = .{ .field1 = 10 },
+    };
+
+    const result =
+        \\field1 = 100
+        \\field2 = "hello world"
+        \\field3 = true
+        \\field4 = 3.14
+        \\field5 = [ 1, 2, 3, 4, 5 ]
+        \\field6 = [ "This", "is", "a", "text", "line" ]
+        \\[field7]
+        \\field1 = 10
+        \\
+    ;
+
+    try serialize(Allocator, t, &writer);
+    try testing.expectEqualSlices(u8, result, ba.constSlice());
+}
+
 test "top level tables" {
     var ba = try std.BoundedArray(u8, 512).init(0);
     var writer = ba.writer().any();
