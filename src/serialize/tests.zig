@@ -37,6 +37,27 @@ test "basic literals" {
     ba.clear();
 }
 
+test "infinities" {
+    var ba = try std.BoundedArray(u8, 16).init(0);
+    var writer = ba.writer().any();
+
+    try serialize(Allocator, std.math.inf(f32), &writer);
+    try testing.expectEqualSlices(u8, "inf", ba.constSlice());
+    ba.clear();
+
+    try serialize(Allocator, -std.math.inf(f32), &writer);
+    try testing.expectEqualSlices(u8, "-inf", ba.constSlice());
+    ba.clear();
+
+    try serialize(Allocator, std.math.inf(f64), &writer);
+    try testing.expectEqualSlices(u8, "inf", ba.constSlice());
+    ba.clear();
+
+    try serialize(Allocator, -std.math.inf(f64), &writer);
+    try testing.expectEqualSlices(u8, "-inf", ba.constSlice());
+    ba.clear();
+}
+
 test "strings" {
     var ba = try std.BoundedArray(u8, 16).init(0);
     var writer = ba.writer().any();

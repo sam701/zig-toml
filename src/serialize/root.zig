@@ -52,7 +52,18 @@ fn serializeStruct(state: *SerializerState, value: anytype, writer: *AnyWriter) 
 
 fn serializeValue(state: *SerializerState, t: std.builtin.Type, value: anytype, writer: *AnyWriter) !void {
     switch (t) {
-        .int, .float, .comptime_int, .comptime_float => try writer.print("{d}", .{value}),
+        .int, .float, .comptime_int, .comptime_float => {
+            if (t == .float) {
+                if (value == std.math.inf(@TypeOf(value))) {
+                    try writer.print("inf", .{});
+                    return;
+                } else if (value == -std.math.inf(@TypeOf(value))) {
+                    try writer.print("-inf", .{});
+                    return;
+                }
+            }
+            try writer.print("{d}", .{value});
+        },
         .bool => if (value) try writer.print("true", .{}) else try writer.print("false", .{}),
         .pointer => {
             const has_string_type = (t.pointer.child == u8 or (@typeInfo(t.pointer.child) == .array and @typeInfo(t.pointer.child).array.child == u8));
