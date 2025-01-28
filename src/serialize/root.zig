@@ -75,7 +75,7 @@ fn serializeValue(state: *SerializerState, t: std.builtin.Type, value: anytype, 
         },
         .bool => if (value) try writer.print("true", .{}) else try writer.print("false", .{}),
         .pointer => {
-            const has_string_type = (t.pointer.child == u8 or (@typeInfo(t.pointer.child) == .array and @typeInfo(t.pointer.child).array.child == u8));
+            const has_string_type = ((t.pointer.child == u8 and t.pointer.size == .slice) or (@typeInfo(t.pointer.child) == .array and @typeInfo(t.pointer.child).array.child == u8));
             if (has_string_type and t.pointer.is_const) {
                 _ = try writer.writeByte('"');
                 const string = value;
@@ -99,8 +99,10 @@ fn serializeValue(state: *SerializerState, t: std.builtin.Type, value: anytype, 
                     }
                     curr_pos = new_pos + 1;
                 }
+                _ = try writer.writeByte('"');
+            } else {
+                try serializeValue(state, @typeInfo(t.pointer.child), value.*, writer);
             }
-            _ = try writer.writeByte('"');
         },
         .array => {
             try writer.print("[ ", .{});

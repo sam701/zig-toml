@@ -58,6 +58,16 @@ test "infinities" {
     ba.clear();
 }
 
+test "pointers" {
+    var ba = try std.BoundedArray(u8, 16).init(0);
+    var writer = ba.writer().any();
+
+    const num: u8 = 127;
+    try serialize(Allocator, &num, &writer);
+    try testing.expectEqualSlices(u8, "127", ba.constSlice());
+    ba.clear();
+}
+
 test "strings" {
     var ba = try std.BoundedArray(u8, 16).init(0);
     var writer = ba.writer().any();
