@@ -1,131 +1,127 @@
 const std = @import("std");
 const testing = std.testing;
-const Allocator = std.testing.allocator;
 const AnyWriter = std.io.AnyWriter;
+const Allocator = std.mem.Allocator;
 
-const MAX_FIELD_COUNT: u8 = 255;
+const SerializerState = struct {
+    allocator: Allocator,
+    table_comp: std.ArrayList([]const u8),
 
-pub fn serialize(allocator: std.mem.Allocator, obj: anytype, writer: *AnyWriter) !void {
-    try serializeStruct(allocator, obj, writer);
+    const Self = @This();
+
+    fn init(allocator: Allocator) Self {
+        return Self{
+            .allocator = allocator,
+            .table_comp = std.ArrayList([]const u8).init(allocator),
+        };
+    }
+
+    fn deinit(self: *Self) void {
+        self.table_comp.deinit();
+    }
+};
+
+pub fn serialize(allocator: Allocator, obj: anytype, writer: *AnyWriter) !void {
+    const ttype = @TypeOf(obj);
+    const tinfo = @typeInfo(ttype);
+    var state = SerializerState.init(allocator);
+    defer state.deinit();
+    try serializeValue(&state, tinfo, obj, writer);
 }
 
-fn serializeStruct(allocator: std.mem.Allocator, value: anytype, writer: *AnyWriter) !void {
+fn serializeStruct(state: *SerializerState, value: anytype, writer: *AnyWriter) !void {
     const ttype = @TypeOf(value);
     const tinfo = @typeInfo(ttype);
     if (tinfo != .@"struct") @panic("non struct type given to serialize");
 
     inline for (tinfo.@"struct".fields) |field| {
-        try serializeField(allocator, @typeInfo(field.type), field.name, @field(value, field.name), writer);
-        _ = try writer.write("\n");
+        const ftype = @typeInfo(field.type);
+
+        if (ftype != .@"struct") {
+            try writer.print("{s} = ", .{field.name});
+            try serializeValue(state, ftype, @field(value, field.name), writer);
+            _ = try writer.write("\n");
+        }
+    }
+
+    inline for (tinfo.@"struct".fields) |field| {
+        const ftype = @typeInfo(field.type);
+        if (ftype != .@"struct") continue;
+
+        try state.table_comp.append(field.name);
+        try writer.writeByte('[');
+        for (0..state.table_comp.items.len - 1) |i| {
+            try writer.print("{s}.", .{state.table_comp.items[i]});
+        }
+        try writer.print("{s}]\n", .{field.name});
+        try serializeValue(state, ftype, @field(value, field.name), writer);
+        _ = state.table_comp.popOrNull();
     }
 }
 
-fn serializeSimpleValue(allocator: std.mem.Allocator, t: std.builtin.Type, value: anytype, writer: *AnyWriter) !void {
+fn serializeValue(state: *SerializerState, t: std.builtin.Type, value: anytype, writer: *AnyWriter) !void {
     switch (t) {
-        .int, .float => try writer.print("{d}", .{value}),
+        .int, .float, .comptime_int, .comptime_float => {
+            if (t == .float) {
+                if (value == std.math.inf(@TypeOf(value))) {
+                    try writer.print("inf", .{});
+                    return;
+                } else if (value == -std.math.inf(@TypeOf(value))) {
+                    try writer.print("-inf", .{});
+                    return;
+                }
+            }
+            try writer.print("{d}", .{value});
+        },
         .bool => if (value) try writer.print("true", .{}) else try writer.print("false", .{}),
         .pointer => {
-            if (t.pointer.child == u8 and t.pointer.size == .slice and t.pointer.is_const) {
-                var esc_string = std.ArrayList(u8).init(allocator);
-                defer esc_string.deinit();
+            const has_string_type = ((t.pointer.child == u8 and t.pointer.size == .slice) or (@typeInfo(t.pointer.child) == .array and @typeInfo(t.pointer.child).array.child == u8));
+            if (has_string_type and t.pointer.is_const) {
+                _ = try writer.writeByte('"');
                 const string = value;
 
                 var curr_pos: usize = 0;
                 while (curr_pos <= string.len) {
-                    const new_pos = std.mem.indexOfAnyPos(u8, string, curr_pos, &.{ '\\', '\"' }) orelse string.len;
-
-                    if (new_pos >= curr_pos) {
-                        try esc_string.appendSlice(string[curr_pos..new_pos]);
-                        if (new_pos != string.len) {
-                            try esc_string.append('\\');
-                            try esc_string.append(string[new_pos]);
+                    const new_pos = std.mem.indexOfAnyPos(u8, string, curr_pos, &.{ '"', '\n', '\t', '\r', '\\', 0x0C, 0x08 }) orelse string.len;
+                    try writer.print("{s}", .{string[curr_pos..new_pos]});
+                    if (new_pos != string.len) {
+                        _ = try writer.writeByte('\\');
+                        switch (string[new_pos]) {
+                            '"' => _ = try writer.writeByte('"'),
+                            '\n' => _ = try writer.writeByte('n'),
+                            '\t' => _ = try writer.writeByte('t'),
+                            '\r' => _ = try writer.writeByte('r'),
+                            '\\' => _ = try writer.writeByte('\\'),
+                            0x0C => _ = try writer.writeByte('f'),
+                            0x08 => _ = try writer.writeByte('b'),
+                            else => unreachable,
                         }
-                        curr_pos = new_pos + 1;
                     }
+                    curr_pos = new_pos + 1;
                 }
-                try writer.print("\"{s}\"", .{esc_string.items});
-            } else @panic("given type is not a simple type and cannot be serialized directly");
-        },
-        else => @panic("given type is not a simple type and cannot be serialized directly"),
-    }
-}
-
-fn serializeField(allocator: std.mem.Allocator, t: std.builtin.Type, key: []const u8, value: anytype, writer: *AnyWriter) !void {
-    switch (t) {
-        .int, .float, .bool => {
-            try writer.print("{s} = ", .{key});
-            try serializeSimpleValue(allocator, t, value, writer);
-        },
-        .pointer => {
-            try writer.print("{s} = ", .{key});
-            if (t.pointer.child == u8 and t.pointer.size == .slice and t.pointer.is_const)
-                try serializeSimpleValue(allocator, t, value, writer);
+                _ = try writer.writeByte('"');
+            } else {
+                try serializeValue(state, @typeInfo(t.pointer.child), value.*, writer);
+            }
         },
         .array => {
-            try writer.print("{s} = [ ", .{key});
+            try writer.print("[ ", .{});
             if (t.array.len != 0) {
                 var i: usize = 0;
                 while (i < t.array.len - 1) {
                     const elm = value[i];
-                    try serializeSimpleValue(allocator, @typeInfo(t.array.child), elm, writer);
+                    try serializeValue(state, @typeInfo(t.array.child), elm, writer);
                     try writer.print(", ", .{});
                     i += 1;
                 }
             }
             const elm = value[t.array.len - 1];
-            try serializeSimpleValue(allocator, @typeInfo(t.array.child), elm, writer);
+            try serializeValue(state, @typeInfo(t.array.child), elm, writer);
             try writer.print(" ]", .{});
         },
         .@"struct" => {
-            try writer.print("[{s}]\n", .{key});
-            try serializeStruct(allocator, value, writer);
+            try serializeStruct(state, value, writer);
         },
         else => {},
     }
-}
-
-fn getFields(tinfo: std.builtin.Type) std.BoundedArray(std.builtin.Type.StructField, MAX_FIELD_COUNT) {
-    comptime var field_names = std.BoundedArray(std.builtin.Type.StructField, MAX_FIELD_COUNT).init(0) catch unreachable;
-    comptime var i: u8 = 0;
-    const fields = tinfo.@"struct".fields;
-    if (fields.len > MAX_FIELD_COUNT) @panic("struct field count exceeded MAX_FIELD_COUNT");
-    inline while (i < fields.len) {
-        const f = fields.ptr[i];
-        field_names.append(f) catch unreachable;
-        i += 1;
-    }
-    return field_names;
-}
-
-test "basic test" {
-    const TestStruct2 = struct {
-        field1: i32,
-    };
-
-    const TestStruct = struct {
-        field1: i32,
-        field2: []const u8,
-        field3: bool,
-        field4: f64,
-        field5: [5]u8,
-        field6: [5][]const u8,
-        field7: TestStruct2,
-    };
-
-    const t = TestStruct{
-        .field1 = 1024,
-        .field2 = "hello \" \\\" \" world",
-        .field3 = false,
-        .field4 = 3.14,
-        .field5 = [_]u8{ 1, 2, 3, 4, 5 },
-        .field6 = [_][]const u8{ "This", "is", "a", "text", "line" },
-        .field7 = .{ .field1 = 10 },
-    };
-
-    var buf: [1024]u8 = undefined;
-    var stream = std.io.fixedBufferStream(&buf);
-    var gwriter = stream.writer();
-    var writer = gwriter.any();
-    try serialize(Allocator, t, &writer);
-    std.debug.print("\n{s}", .{buf});
 }
