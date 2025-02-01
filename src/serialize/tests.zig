@@ -2,6 +2,10 @@ const std = @import("std");
 const serialize = @import("./root.zig").serialize;
 const testing = std.testing;
 const Allocator = testing.allocator;
+const datetime = @import("datetime");
+const Date = datetime.Date;
+const Time = datetime.Time;
+const DateTime = datetime.DateTime;
 
 test "basic literals" {
     var ba = try std.BoundedArray(u8, 16).init(0);
@@ -95,6 +99,31 @@ test "strings" {
     // String with escape quotes and backslashes
     try serialize(Allocator, "hello\\\"world", &writer);
     try testing.expectEqualSlices(u8, "\"hello\\\\\\\"world\"", ba.constSlice());
+    ba.clear();
+}
+
+test "date times" {
+    var ba = try std.BoundedArray(u8, 64).init(0);
+    var writer = ba.writer().any();
+
+    try serialize(Allocator, Date{ .day = 1, .month = 2, .year = 2025 }, &writer);
+    try testing.expectEqualSlices(u8, "2025-02-01", ba.constSlice());
+    ba.clear();
+
+    try serialize(Allocator, Time{ .hour = 15, .minute = 5, .second = 0 }, &writer);
+    try testing.expectEqualSlices(u8, "15:05:00", ba.constSlice());
+    ba.clear();
+
+    try serialize(Allocator, Time{ .hour = 15, .minute = 5, .second = 0, .nanosecond = 123456789 }, &writer);
+    try testing.expectEqualSlices(u8, "15:05:00.123456789", ba.constSlice());
+    ba.clear();
+
+    try serialize(Allocator, DateTime{
+        .time = .{ .hour = 15, .minute = 5, .second = 0, .nanosecond = 123456789 },
+        .date = .{ .day = 1, .month = 2, .year = 2025 },
+        .offset_minutes = 150,
+    }, &writer);
+    try testing.expectEqualSlices(u8, "2025-02-0115:05:00.123456789-02:30", ba.constSlice());
     ba.clear();
 }
 

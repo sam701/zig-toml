@@ -4,7 +4,10 @@ pub fn build(b: *std.Build) void {
     const optimizeOpt = b.standardOptimizeOption(.{});
     const targetOpt = b.standardTargetOptions(.{});
 
+    const datetime = b.createModule(.{ .root_source_file = b.path("src/datetime.zig") });
+
     const module = b.addModule("zig-toml", .{ .root_source_file = b.path("src/main.zig") });
+    module.addImport("datetime", datetime);
 
     const main_tests = b.addTest(.{
         .root_source_file = b.path("src/tests.zig"),
@@ -16,6 +19,8 @@ pub fn build(b: *std.Build) void {
         .target = targetOpt,
         .optimize = optimizeOpt,
     });
+    serialize_tests.root_module.addImport("datetime", datetime);
+
     const run_tests = b.addRunArtifact(main_tests);
     const run_serialize_tests = b.addRunArtifact(serialize_tests);
     const test_step = b.step("test", "Run library tests");

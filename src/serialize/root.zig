@@ -2,6 +2,10 @@ const std = @import("std");
 const testing = std.testing;
 const AnyWriter = std.io.AnyWriter;
 const Allocator = std.mem.Allocator;
+const datetime = @import("datetime");
+const Date = datetime.Date;
+const Time = datetime.Time;
+const DateTime = datetime.DateTime;
 
 const SerializerState = struct {
     allocator: Allocator,
@@ -33,6 +37,28 @@ fn serializeStruct(state: *SerializerState, value: anytype, writer: *AnyWriter) 
     const ttype = @TypeOf(value);
     const tinfo = @typeInfo(ttype);
     if (tinfo != .@"struct") @panic("non struct type given to serialize");
+
+    if (@TypeOf(value) == Date) {
+        try writer.print("{d}-{d:02}-{d:02}", .{ value.year, value.month, value.day });
+        return;
+    }
+    if (@TypeOf(value) == Time) {
+        try writer.print("{d:02}:{d:02}:{d:02}", .{ value.hour, value.minute, value.second });
+        if (value.nanosecond != 0)
+            try writer.print(".{d}", .{value.nanosecond});
+        return;
+    }
+    if (@TypeOf(value) == DateTime) {
+        try serializeStruct(state, value.date, writer);
+        try serializeStruct(state, value.time, writer);
+        if (value.offset_minutes) |om| {
+            if (om == 0) return;
+            const mins: u16 = @intCast(@divFloor(om, 60));
+            const secs: u16 = @intCast(@mod(om, 60));
+            try writer.print("-{d:02}:{d:02}", .{ mins, secs });
+        }
+        return;
+    }
 
     inline for (tinfo.@"struct".fields) |field| {
         const ftype = @typeInfo(field.type);
