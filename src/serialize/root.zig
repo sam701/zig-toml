@@ -61,10 +61,12 @@ fn serializeStruct(state: *SerializerState, value: anytype, writer: *AnyWriter) 
 
 fn isPointerToStruct(t: std.builtin.Type) bool {
     if (t != .pointer) return false;
-    if (@typeInfo(t.pointer.child) == .@"struct")
+
+    var child = @typeInfo(t.pointer.child);
+    while (child == .pointer) child = @typeInfo(child.pointer.child);
+
+    if (child == .@"struct")
         return true
-    else if (@typeInfo(t.pointer.child) == .pointer)
-        isPointerToStruct(@typeInfo(t.pointer.child))
     else
         return false;
 }

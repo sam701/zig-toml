@@ -30,11 +30,11 @@ This is a top-down LL parser that parses directly into Zig structs.
   * [x] Mapping to optional fields
   * [x] Mapping to HashMaps
 * [ ] Serialization
-    * [x] Basic types like `int`s, floating points, strings, booleans etc.
+    * [x] Basic types like integers, floating points, strings, booleans etc.
     * [x] Arrays
     * [x] Top level tables
     * [x] Sub tables
-    * [x] Pointer to basic types
+    * [x] Pointers
 
 ## Example
 See [`example1.zig`](./examples/example1.zig) for the complete code that parses [`example.toml`](./examples/example1.toml)
