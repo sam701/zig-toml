@@ -278,7 +278,7 @@ test "sub tables" {
 
     const TestStruct2 = struct {
         field1: i32,
-        field2: TestStruct3,
+        field2: *const TestStruct3,
     };
 
     const TestStruct = struct {
@@ -298,7 +298,7 @@ test "sub tables" {
         .field4 = 3.14,
         .field5 = [_]u8{ 1, 2, 3, 4, 5 },
         .field6 = [_][]const u8{ "This", "is", "a", "text", "line" },
-        .field7 = .{ .field1 = 10, .field2 = .{ .field1 = 100 } },
+        .field7 = .{ .field1 = 10, .field2 = &.{ .field1 = 100 } },
     };
 
     const result =

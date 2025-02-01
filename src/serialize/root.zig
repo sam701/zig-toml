@@ -37,7 +37,7 @@ fn serializeStruct(state: *SerializerState, value: anytype, writer: *AnyWriter) 
     inline for (tinfo.@"struct".fields) |field| {
         const ftype = @typeInfo(field.type);
 
-        if (ftype != .@"struct") {
+        if (ftype != .@"struct" and comptime !isPointerToStruct(ftype)) {
             try writer.print("{s} = ", .{field.name});
             try serializeValue(state, ftype, @field(value, field.name), writer);
             _ = try writer.write("\n");
@@ -46,7 +46,7 @@ fn serializeStruct(state: *SerializerState, value: anytype, writer: *AnyWriter) 
 
     inline for (tinfo.@"struct".fields) |field| {
         const ftype = @typeInfo(field.type);
-        if (ftype != .@"struct") continue;
+        if (ftype != .@"struct" and comptime !isPointerToStruct(ftype)) continue;
 
         try state.table_comp.append(field.name);
         try writer.writeByte('[');
@@ -57,6 +57,16 @@ fn serializeStruct(state: *SerializerState, value: anytype, writer: *AnyWriter) 
         try serializeValue(state, ftype, @field(value, field.name), writer);
         _ = state.table_comp.popOrNull();
     }
+}
+
+fn isPointerToStruct(t: std.builtin.Type) bool {
+    if (t != .pointer) return false;
+    if (@typeInfo(t.pointer.child) == .@"struct")
+        return true
+    else if (@typeInfo(t.pointer.child) == .pointer)
+        isPointerToStruct(@typeInfo(t.pointer.child))
+    else
+        return false;
 }
 
 fn serializeValue(state: *SerializerState, t: std.builtin.Type, value: anytype, writer: *AnyWriter) !void {
