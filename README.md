@@ -35,6 +35,9 @@ This is a top-down LL parser that parses directly into Zig structs.
     * [x] Top level tables
     * [x] Sub tables
     * [x] Pointers
+    * [x] Date, time, DateTime, time offset
+    * [x] Enums
+    * [x] Unions
 
 ## Example
 See [`example1.zig`](./examples/example1.zig) for the complete code that parses [`example.toml`](./examples/example1.toml)

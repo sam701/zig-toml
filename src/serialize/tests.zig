@@ -72,6 +72,38 @@ test "pointers" {
     ba.clear();
 }
 
+test "enums" {
+    const Color = enum {
+        Red,
+        Green,
+        Yellow,
+        Blue,
+        Pink,
+    };
+
+    const color = Color.Blue;
+    var ba = try std.BoundedArray(u8, 16).init(0);
+    var writer = ba.writer().any();
+    try serialize(Allocator, color, &writer);
+    try testing.expectEqualSlices(u8, "\"Blue\"", ba.constSlice());
+    ba.clear();
+}
+
+test "unions" {
+    const MyUnion = union(enum) {
+        f1: u8,
+        f2: u16,
+        f3: []const u8,
+    };
+
+    const u = MyUnion{ .f1 = 255 };
+    var ba = try std.BoundedArray(u8, 16).init(0);
+    var writer = ba.writer().any();
+    try serialize(Allocator, u, &writer);
+    try testing.expectEqualSlices(u8, "255", ba.constSlice());
+    ba.clear();
+}
+
 test "strings" {
     var ba = try std.BoundedArray(u8, 16).init(0);
     var writer = ba.writer().any();

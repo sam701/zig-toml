@@ -157,8 +157,12 @@ fn serializeValue(state: *SerializerState, t: std.builtin.Type, value: anytype, 
             try serializeValue(state, @typeInfo(t.array.child), elm, writer);
             try writer.print(" ]", .{});
         },
-        .@"struct" => {
-            try serializeStruct(state, value, writer);
+        .@"struct" => try serializeStruct(state, value, writer),
+        .@"enum" => try writer.print("\"{s}\"", .{@tagName(value)}),
+        .@"union" => {
+            switch (value) {
+                inline else => |s| try serializeValue(state, @typeInfo(@TypeOf(s)), s, writer),
+            }
         },
         else => {},
     }
