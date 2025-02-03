@@ -5,10 +5,6 @@ const struct_mapping = @import("./struct_mapping.zig");
 const datetime = @import("datetime");
 const Table = @import("./table.zig").Table;
 
-comptime {
-    _ = @import("./serialize/root.zig");
-}
-
 test "full" {
     var p = main.Parser(main.Table).init(testing.allocator);
     defer p.deinit();
