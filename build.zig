@@ -22,6 +22,9 @@ pub fn build(b: *std.Build) void {
         .target = targetOpt,
         .optimize = optimizeOpt,
     });
+
+    main_tests.root_module.addImport("parser", parser);
+    main_tests.root_module.addImport("datetime", datetime);
     serialize_tests.root_module.addImport("datetime", datetime);
 
     const run_tests = b.addRunArtifact(main_tests);
