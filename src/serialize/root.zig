@@ -38,26 +38,29 @@ fn serializeStruct(state: *SerializerState, value: anytype, writer: *AnyWriter) 
     const tinfo = @typeInfo(ttype);
     if (tinfo != .@"struct") @panic("non struct type given to serialize");
 
-    if (@TypeOf(value) == Date) {
-        try writer.print("{d}-{d:02}-{d:02}", .{ value.year, value.month, value.day });
-        return;
-    }
-    if (@TypeOf(value) == Time) {
-        try writer.print("{d:02}:{d:02}:{d:02}", .{ value.hour, value.minute, value.second });
-        if (value.nanosecond != 0)
-            try writer.print(".{d}", .{value.nanosecond});
-        return;
-    }
-    if (@TypeOf(value) == DateTime) {
-        try serializeStruct(state, value.date, writer);
-        try serializeStruct(state, value.time, writer);
-        if (value.offset_minutes) |om| {
-            if (om == 0) return;
-            const mins: u16 = @intCast(@divFloor(om, 60));
-            const secs: u16 = @intCast(@mod(om, 60));
-            try writer.print("-{d:02}:{d:02}", .{ mins, secs });
-        }
-        return;
+    switch (@TypeOf(value)) {
+        Date => {
+            try writer.print("{d}-{d:02}-{d:02}", .{ value.year, value.month, value.day });
+            return;
+        },
+        Time => {
+            try writer.print("{d:02}:{d:02}:{d:02}", .{ value.hour, value.minute, value.second });
+            if (value.nanosecond != 0)
+                try writer.print(".{d}", .{value.nanosecond});
+            return;
+        },
+        DateTime => {
+            try serializeStruct(state, value.date, writer);
+            try serializeStruct(state, value.time, writer);
+            if (value.offset_minutes) |om| {
+                if (om == 0) return;
+                const mins: u16 = @intCast(@divFloor(om, 60));
+                const secs: u16 = @intCast(@mod(om, 60));
+                try writer.print("-{d:02}:{d:02}", .{ mins, secs });
+            }
+            return;
+        },
+        else => {},
     }
 
     inline for (tinfo.@"struct".fields) |field| {
@@ -91,10 +94,7 @@ fn isPointerToStruct(t: std.builtin.Type) bool {
     var child = @typeInfo(t.pointer.child);
     while (child == .pointer) child = @typeInfo(child.pointer.child);
 
-    if (child == .@"struct")
-        return true
-    else
-        return false;
+    return child == .@"struct";
 }
 
 fn serializeValue(state: *SerializerState, t: std.builtin.Type, value: anytype, writer: *AnyWriter) !void {
