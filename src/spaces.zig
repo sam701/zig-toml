@@ -1,6 +1,6 @@
 const std = @import("std");
 const testing = std.testing;
-const parser = @import("./parser.zig");
+const parser = @import("parser");
 const Context = parser.Context;
 
 fn contains(c: u8, allowed: []const u8) bool {

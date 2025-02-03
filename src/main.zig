@@ -1,9 +1,9 @@
 const std = @import("std");
 
-const parser = @import("./parser.zig");
+const parser = @import("parser");
 const table = @import("./table.zig");
 const struct_mapping = @import("./struct_mapping.zig");
-const datetime = @import("./datetime.zig");
+const datetime = @import("datetime");
 const value = @import("./value.zig");
 const serialize = @import("serialize/root.zig");
 

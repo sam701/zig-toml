@@ -1,10 +1,10 @@
 const std = @import("std");
-const parser = @import("./parser.zig");
+const parser = @import("parser");
 const testing = std.testing;
 
 const Value = @import("./value.zig").Value;
 const Table = @import("./table.zig").Table;
-const datetime = @import("./datetime.zig");
+const datetime = @import("datetime");
 
 pub const Context = struct {
     alloc: std.mem.Allocator,
