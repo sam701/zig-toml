@@ -2,6 +2,10 @@ const std = @import("std");
 const testing = std.testing;
 const AnyWriter = std.io.AnyWriter;
 const Allocator = std.mem.Allocator;
+const datetime = @import("../datetime.zig");
+const Date = datetime.Date;
+const Time = datetime.Time;
+const DateTime = datetime.DateTime;
 
 const SerializerState = struct {
     allocator: Allocator,
@@ -34,10 +38,35 @@ fn serializeStruct(state: *SerializerState, value: anytype, writer: *AnyWriter) 
     const tinfo = @typeInfo(ttype);
     if (tinfo != .@"struct") @panic("non struct type given to serialize");
 
+    switch (@TypeOf(value)) {
+        Date => {
+            try writer.print("{d}-{d:02}-{d:02}", .{ value.year, value.month, value.day });
+            return;
+        },
+        Time => {
+            try writer.print("{d:02}:{d:02}:{d:02}", .{ value.hour, value.minute, value.second });
+            if (value.nanosecond != 0)
+                try writer.print(".{d}", .{value.nanosecond});
+            return;
+        },
+        DateTime => {
+            try serializeStruct(state, value.date, writer);
+            try serializeStruct(state, value.time, writer);
+            if (value.offset_minutes) |om| {
+                if (om == 0) return;
+                const mins: u16 = @intCast(@divFloor(om, 60));
+                const secs: u16 = @intCast(@mod(om, 60));
+                try writer.print("-{d:02}:{d:02}", .{ mins, secs });
+            }
+            return;
+        },
+        else => {},
+    }
+
     inline for (tinfo.@"struct".fields) |field| {
         const ftype = @typeInfo(field.type);
 
-        if (ftype != .@"struct") {
+        if (ftype != .@"struct" and comptime !isPointerToStruct(ftype)) {
             try writer.print("{s} = ", .{field.name});
             try serializeValue(state, ftype, @field(value, field.name), writer);
             _ = try writer.write("\n");
@@ -46,7 +75,7 @@ fn serializeStruct(state: *SerializerState, value: anytype, writer: *AnyWriter) 
 
     inline for (tinfo.@"struct".fields) |field| {
         const ftype = @typeInfo(field.type);
-        if (ftype != .@"struct") continue;
+        if (ftype != .@"struct" and comptime !isPointerToStruct(ftype)) continue;
 
         try state.table_comp.append(field.name);
         try writer.writeByte('[');
@@ -57,6 +86,15 @@ fn serializeStruct(state: *SerializerState, value: anytype, writer: *AnyWriter) 
         try serializeValue(state, ftype, @field(value, field.name), writer);
         _ = state.table_comp.popOrNull();
     }
+}
+
+fn isPointerToStruct(t: std.builtin.Type) bool {
+    if (t != .pointer) return false;
+
+    var child = @typeInfo(t.pointer.child);
+    while (child == .pointer) child = @typeInfo(child.pointer.child);
+
+    return child == .@"struct";
 }
 
 fn serializeValue(state: *SerializerState, t: std.builtin.Type, value: anytype, writer: *AnyWriter) !void {
@@ -119,8 +157,12 @@ fn serializeValue(state: *SerializerState, t: std.builtin.Type, value: anytype, 
             try serializeValue(state, @typeInfo(t.array.child), elm, writer);
             try writer.print(" ]", .{});
         },
-        .@"struct" => {
-            try serializeStruct(state, value, writer);
+        .@"struct" => try serializeStruct(state, value, writer),
+        .@"enum" => try writer.print("\"{s}\"", .{@tagName(value)}),
+        .@"union" => {
+            switch (value) {
+                inline else => |s| try serializeValue(state, @typeInfo(@TypeOf(s)), s, writer),
+            }
         },
         else => {},
     }

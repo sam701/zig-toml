@@ -2,6 +2,10 @@ const std = @import("std");
 const serialize = @import("./root.zig").serialize;
 const testing = std.testing;
 const Allocator = testing.allocator;
+const datetime = @import("../datetime.zig");
+const Date = datetime.Date;
+const Time = datetime.Time;
+const DateTime = datetime.DateTime;
 
 test "basic literals" {
     var ba = try std.BoundedArray(u8, 16).init(0);
@@ -68,6 +72,38 @@ test "pointers" {
     ba.clear();
 }
 
+test "enums" {
+    const Color = enum {
+        Red,
+        Green,
+        Yellow,
+        Blue,
+        Pink,
+    };
+
+    const color = Color.Blue;
+    var ba = try std.BoundedArray(u8, 16).init(0);
+    var writer = ba.writer().any();
+    try serialize(Allocator, color, &writer);
+    try testing.expectEqualSlices(u8, "\"Blue\"", ba.constSlice());
+    ba.clear();
+}
+
+test "unions" {
+    const MyUnion = union(enum) {
+        f1: u8,
+        f2: u16,
+        f3: []const u8,
+    };
+
+    const u = MyUnion{ .f1 = 255 };
+    var ba = try std.BoundedArray(u8, 16).init(0);
+    var writer = ba.writer().any();
+    try serialize(Allocator, u, &writer);
+    try testing.expectEqualSlices(u8, "255", ba.constSlice());
+    ba.clear();
+}
+
 test "strings" {
     var ba = try std.BoundedArray(u8, 16).init(0);
     var writer = ba.writer().any();
@@ -95,6 +131,31 @@ test "strings" {
     // String with escape quotes and backslashes
     try serialize(Allocator, "hello\\\"world", &writer);
     try testing.expectEqualSlices(u8, "\"hello\\\\\\\"world\"", ba.constSlice());
+    ba.clear();
+}
+
+test "date times" {
+    var ba = try std.BoundedArray(u8, 64).init(0);
+    var writer = ba.writer().any();
+
+    try serialize(Allocator, Date{ .day = 1, .month = 2, .year = 2025 }, &writer);
+    try testing.expectEqualSlices(u8, "2025-02-01", ba.constSlice());
+    ba.clear();
+
+    try serialize(Allocator, Time{ .hour = 15, .minute = 5, .second = 0 }, &writer);
+    try testing.expectEqualSlices(u8, "15:05:00", ba.constSlice());
+    ba.clear();
+
+    try serialize(Allocator, Time{ .hour = 15, .minute = 5, .second = 0, .nanosecond = 123456789 }, &writer);
+    try testing.expectEqualSlices(u8, "15:05:00.123456789", ba.constSlice());
+    ba.clear();
+
+    try serialize(Allocator, DateTime{
+        .time = .{ .hour = 15, .minute = 5, .second = 0, .nanosecond = 123456789 },
+        .date = .{ .day = 1, .month = 2, .year = 2025 },
+        .offset_minutes = 150,
+    }, &writer);
+    try testing.expectEqualSlices(u8, "2025-02-0115:05:00.123456789-02:30", ba.constSlice());
     ba.clear();
 }
 
@@ -278,7 +339,7 @@ test "sub tables" {
 
     const TestStruct2 = struct {
         field1: i32,
-        field2: TestStruct3,
+        field2: *const TestStruct3,
     };
 
     const TestStruct = struct {
@@ -298,7 +359,7 @@ test "sub tables" {
         .field4 = 3.14,
         .field5 = [_]u8{ 1, 2, 3, 4, 5 },
         .field6 = [_][]const u8{ "This", "is", "a", "text", "line" },
-        .field7 = .{ .field1 = 10, .field2 = .{ .field1 = 100 } },
+        .field7 = .{ .field1 = 10, .field2 = &.{ .field1 = 100 } },
     };
 
     const result =

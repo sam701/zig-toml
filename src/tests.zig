@@ -6,7 +6,7 @@ const datetime = @import("./datetime.zig");
 const Table = @import("./table.zig").Table;
 
 comptime {
-    _ = @import("./serialize/root.zig");
+    _ = @import("./serialize/tests.zig");
 }
 
 test "full" {

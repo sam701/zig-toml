@@ -11,16 +11,10 @@ pub fn build(b: *std.Build) void {
         .target = targetOpt,
         .optimize = optimizeOpt,
     });
-    const serialize_tests = b.addTest(.{
-        .root_source_file = b.path("src/serialize/tests.zig"),
-        .target = targetOpt,
-        .optimize = optimizeOpt,
-    });
+
     const run_tests = b.addRunArtifact(main_tests);
-    const run_serialize_tests = b.addRunArtifact(serialize_tests);
     const test_step = b.step("test", "Run library tests");
     test_step.dependOn(&run_tests.step);
-    test_step.dependOn(&run_serialize_tests.step);
 
     // === examples
     const example1 = b.addExecutable(.{
