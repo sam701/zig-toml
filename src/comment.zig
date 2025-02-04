@@ -1,5 +1,5 @@
 const std = @import("std");
-const parser = @import("parser");
+const parser = @import("./parser.zig");
 const Context = parser.Context;
 const spaces = @import("./spaces.zig");
 const testing = std.testing;

@@ -1,5 +1,5 @@
 const std = @import("std");
-const parser = @import("parser");
+const parser = @import("./parser.zig");
 const testing = std.testing;
 
 pub fn interpret(txt: []const u8) ?i64 {

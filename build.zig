@@ -5,12 +5,9 @@ pub fn build(b: *std.Build) void {
     const targetOpt = b.standardTargetOptions(.{});
 
     const datetime = b.createModule(.{ .root_source_file = b.path("src/datetime.zig") });
-    const parser = b.createModule(.{ .root_source_file = b.path("src/parser.zig") });
 
     const module = b.addModule("zig-toml", .{ .root_source_file = b.path("src/main.zig") });
     module.addImport("datetime", datetime);
-    module.addImport("parser", parser);
-    datetime.addImport("parser", parser);
 
     const main_tests = b.addTest(.{
         .root_source_file = b.path("src/tests.zig"),

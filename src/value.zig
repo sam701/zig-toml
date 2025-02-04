@@ -1,5 +1,5 @@
 const std = @import("std");
-const parser = @import("parser");
+const parser = @import("./parser.zig");
 const testing = std.testing;
 
 const string = @import("./string.zig");
@@ -7,7 +7,7 @@ const integer = @import("./integer.zig");
 const float = @import("./float.zig");
 const array = @import("./array.zig");
 const tablepkg = @import("./table.zig");
-const datetime = @import("datetime");
+const datetime = @import("./datetime.zig");
 const Table = tablepkg.Table;
 
 pub const ValueList = std.ArrayList(Value);
