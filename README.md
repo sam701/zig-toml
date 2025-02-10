@@ -39,6 +39,16 @@ This is a top-down LL parser that parses directly into Zig structs.
     * [x] Enums
     * [x] Unions
 
+## Using with the Zig package manager
+Add `zig-toml` to your `build.zig.zon`
+```
+# For zig-master
+zig fetch --save git+https://github.com/sam701/zig-toml
+
+# For zig 0.13
+zig fetch --save git+https://github.com/sam701/zig-toml#last-zig-0.13
+```
+
 ## Example
 See [`example1.zig`](./examples/example1.zig) for the complete code that parses [`example.toml`](./examples/example1.toml)
 
