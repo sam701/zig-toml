@@ -84,7 +84,7 @@ fn serializeStruct(state: *SerializerState, value: anytype, writer: *AnyWriter) 
         }
         try writer.print("{s}]\n", .{field.name});
         try serializeValue(state, ftype, @field(value, field.name), writer);
-        _ = state.table_comp.popOrNull();
+        _ = state.table_comp.pop();
     }
 }
 
