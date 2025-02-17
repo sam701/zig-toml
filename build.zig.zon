@@ -1,6 +1,7 @@
 .{
     .name = "zig-toml",
     .version = "0.0.0",
+    .minimum_zig_version = "0.14.0-dev.3197+1d8857bbe",
     .paths = .{
         "build.zig",
         "build.zig.zon",
