@@ -78,11 +78,33 @@ fn serializeStruct(state: *SerializerState, value: anytype, writer: *AnyWriter) 
         if (ftype != .@"struct" and comptime !isPointerToStruct(ftype)) continue;
 
         try state.table_comp.append(field.name);
-        try writer.writeByte('[');
-        for (0..state.table_comp.items.len - 1) |i| {
-            try writer.print("{s}.", .{state.table_comp.items[i]});
+
+        // Check if the struct comprises of fields which are basically other structs
+        // If so, we don't write anything for this struct and instead write only the
+        // structs that it holds.
+        //
+        // Also, since we treat pointer to structs same as normal structs, we also need
+        // resolve the pointers to check if the current field is a struct.
+        comptime var ftype2 = ftype;
+        inline while (ftype2 == .pointer) ftype2 = @typeInfo(ftype2.pointer.child);
+        var has_basic_field: bool = undefined;
+        inline for (ftype2.@"struct".fields) |inner_field| {
+            const iftype = @typeInfo(inner_field.type);
+            if (iftype != .@"struct" and comptime !isPointerToStruct(iftype)) {
+                has_basic_field = true;
+                break;
+            }
+            has_basic_field = false;
         }
-        try writer.print("{s}]\n", .{field.name});
+
+        if (has_basic_field) {
+            try writer.writeByte('[');
+            for (0..state.table_comp.items.len - 1) |i| {
+                try writer.print("{s}.", .{state.table_comp.items[i]});
+            }
+            try writer.print("{s}]\n", .{field.name});
+        }
+
         try serializeValue(state, ftype, @field(value, field.name), writer);
         _ = state.table_comp.pop();
     }
