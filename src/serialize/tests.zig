@@ -379,3 +379,33 @@ test "sub tables" {
     try serialize(Allocator, t, &writer);
     try testing.expectEqualSlices(u8, result, ba.constSlice());
 }
+
+test "tables with no basic value" {
+    var ba = try std.BoundedArray(u8, 512).init(0);
+    var writer = ba.writer().any();
+
+    const TestStruct3 = struct {
+        field3: i32,
+    };
+
+    const TestStruct2 = struct {
+        field2: *const TestStruct3,
+    };
+
+    const TestStruct = struct {
+        field1: TestStruct2,
+    };
+
+    const t = TestStruct{
+        .field1 = .{ .field2 = &.{ .field3 = 100 } },
+    };
+
+    const result =
+        \\[field1.field2]
+        \\field3 = 100
+        \\
+    ;
+
+    try serialize(Allocator, t, &writer);
+    try testing.expectEqualSlices(u8, result, ba.constSlice());
+}
