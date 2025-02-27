@@ -6,6 +6,7 @@ const datetime = @import("../datetime.zig");
 const Date = datetime.Date;
 const Time = datetime.Time;
 const DateTime = datetime.DateTime;
+const StructField = std.builtin.Type.StructField;
 
 const SerializerState = struct {
     allocator: Allocator,
@@ -63,7 +64,10 @@ fn serializeStruct(state: *SerializerState, value: anytype, writer: *AnyWriter) 
         else => {},
     }
 
-    inline for (tinfo.@"struct".fields) |field| {
+    comptime var fields = tinfo.@"struct".fields[0..tinfo.@"struct".fields.len].*;
+    comptime std.mem.sortUnstable(StructField, &fields, {}, cmp_field);
+
+    inline for (fields) |field| {
         const ftype = @typeInfo(field.type);
 
         if (ftype != .@"struct" and comptime !isPointerToStruct(ftype)) {
@@ -73,7 +77,7 @@ fn serializeStruct(state: *SerializerState, value: anytype, writer: *AnyWriter) 
         }
     }
 
-    inline for (tinfo.@"struct".fields) |field| {
+    inline for (fields) |field| {
         const ftype = @typeInfo(field.type);
         if (ftype != .@"struct" and comptime !isPointerToStruct(ftype)) continue;
 
@@ -188,4 +192,8 @@ fn serializeValue(state: *SerializerState, t: std.builtin.Type, value: anytype, 
         },
         else => {},
     }
+}
+
+fn cmp_field(_: void, lhs: StructField, rhs: StructField) bool {
+    return std.mem.order(u8, lhs.name, rhs.name) == .lt;
 }

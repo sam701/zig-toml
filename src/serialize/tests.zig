@@ -380,6 +380,27 @@ test "sub tables" {
     try testing.expectEqualSlices(u8, result, ba.constSlice());
 }
 
+test "sort fields" {
+    var ba = try std.BoundedArray(u8, 512).init(0);
+    var writer = ba.writer().any();
+
+    const TestStruct = struct {
+        field3: i32,
+        field1: f32,
+    };
+
+    const t = TestStruct{ .field1 = 3.14, .field3 = 123 };
+
+    const result =
+        \\field1 = 3.14
+        \\field3 = 123
+        \\
+    ;
+
+    try serialize(Allocator, t, &writer);
+    try testing.expectEqualSlices(u8, result, ba.constSlice());
+}
+
 test "tables with no basic value" {
     var ba = try std.BoundedArray(u8, 512).init(0);
     var writer = ba.writer().any();
