@@ -1,5 +1,5 @@
 .{
-    .name = .zig_toml,
+    .name = .toml,
     .fingerprint = 0xdaafbfb07b8bd669,
     .version = "0.0.0",
     .minimum_zig_version = "0.14.0-dev.3197+1d8857bbe",
