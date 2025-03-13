@@ -89,6 +89,19 @@ test "enums" {
     ba.clear();
 }
 
+test "optionals" {
+    var ba = try std.BoundedArray(u8, 16).init(0);
+    var writer = ba.writer().any();
+
+    var optval: ?u32 = null;
+    try serialize(Allocator, optval, &writer);
+    try testing.expectEqualSlices(u8, "", ba.constSlice());
+
+    optval = 100;
+    try serialize(Allocator, optval, &writer);
+    try testing.expectEqualSlices(u8, "100", ba.constSlice());
+}
+
 test "unions" {
     const MyUnion = union(enum) {
         f1: u8,

@@ -65,7 +65,7 @@ fn serializeStruct(state: *SerializerState, value: anytype, writer: *AnyWriter) 
     }
 
     comptime var fields = tinfo.@"struct".fields[0..tinfo.@"struct".fields.len].*;
-    comptime std.mem.sortUnstable(StructField, &fields, {}, cmp_field);
+    comptime std.mem.sortUnstable(StructField, &fields, {}, cmpField);
 
     inline for (fields) |field| {
         const ftype = @typeInfo(field.type);
@@ -190,10 +190,15 @@ fn serializeValue(state: *SerializerState, t: std.builtin.Type, value: anytype, 
                 inline else => |s| try serializeValue(state, @typeInfo(@TypeOf(s)), s, writer),
             }
         },
+        .optional => {
+            if (value) |v| {
+                try serializeValue(state, @typeInfo(@TypeOf(v)), v, writer);
+            }
+        },
         else => {},
     }
 }
 
-fn cmp_field(_: void, lhs: StructField, rhs: StructField) bool {
+fn cmpField(_: void, lhs: StructField, rhs: StructField) bool {
     return std.mem.order(u8, lhs.name, rhs.name) == .lt;
 }
