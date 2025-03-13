@@ -63,6 +63,14 @@ fn serializeStruct(state: *SerializerState, value: anytype, writer: *AnyWriter) 
         },
         else => {
             if (isMapType(@TypeOf(value))) {
+                if (state.table_comp.items.len != 0) {
+                    try writer.writeByte('[');
+                    for (0..state.table_comp.items.len - 1) |i| {
+                        try writer.print("{s}.", .{state.table_comp.items[i]});
+                    }
+                    try writer.print("{s}", .{state.table_comp.items[state.table_comp.items.len - 1]});
+                    _ = try writer.write("]\n");
+                }
                 return serializeMap(state, value, writer);
             }
         },

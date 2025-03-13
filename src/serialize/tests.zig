@@ -547,3 +547,49 @@ test "maps with maps" {
     try serialize(Allocator, hashmap, &writer);
     try testing.expectEqualSlices(u8, result, ba.constSlice());
 }
+
+test "structs containing maps" {
+    const TestStruct = struct {
+        field1: std.StringHashMap(usize) = std.StringHashMap(usize).init(testing.allocator),
+        field2: std.StringHashMap(usize) = std.StringHashMap(usize).init(testing.allocator),
+        field3: std.StringHashMap(usize) = std.StringHashMap(usize).init(testing.allocator),
+    };
+
+    var t = TestStruct{};
+    defer t.field1.deinit();
+    defer t.field2.deinit();
+    defer t.field3.deinit();
+
+    try t.field1.put("a", 1);
+    try t.field1.put("b", 2);
+    try t.field1.put("c", 3);
+
+    try t.field2.put("a", 1);
+    try t.field2.put("b", 2);
+    try t.field2.put("c", 3);
+
+    try t.field3.put("a", 1);
+    try t.field3.put("b", 2);
+    try t.field3.put("c", 3);
+
+    const result =
+        \\[field1]
+        \\a = 1
+        \\b = 2
+        \\c = 3
+        \\[field2]
+        \\a = 1
+        \\b = 2
+        \\c = 3
+        \\[field3]
+        \\a = 1
+        \\b = 2
+        \\c = 3
+        \\
+    ;
+
+    var ba = try std.BoundedArray(u8, 512).init(0);
+    var writer = ba.writer().any();
+    try serialize(Allocator, t, &writer);
+    try testing.expectEqualSlices(u8, result, ba.constSlice());
+}
