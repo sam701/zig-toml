@@ -61,11 +61,16 @@ fn serializeStruct(state: *SerializerState, value: anytype, writer: *AnyWriter) 
             }
             return;
         },
-        else => {},
+        else => {
+            const is_map = @hasDecl(@TypeOf(value), "keyIterator") and @hasDecl(@TypeOf(value), "valueIterator") and @hasDecl(@TypeOf(value), "iterator");
+            if (is_map) {
+                return serializeMap(state, value, writer);
+            }
+        },
     }
 
     comptime var fields = tinfo.@"struct".fields[0..tinfo.@"struct".fields.len].*;
-    comptime std.mem.sortUnstable(StructField, &fields, {}, cmpField);
+    comptime std.mem.sortUnstable(StructField, &fields, {}, cmpFields);
 
     inline for (fields) |field| {
         const ftype = @typeInfo(field.type);
@@ -139,8 +144,7 @@ fn serializeValue(state: *SerializerState, t: std.builtin.Type, value: anytype, 
         },
         .bool => if (value) try writer.print("true", .{}) else try writer.print("false", .{}),
         .pointer => {
-            const has_string_type = ((t.pointer.child == u8 and t.pointer.size == .slice) or (@typeInfo(t.pointer.child) == .array and @typeInfo(t.pointer.child).array.child == u8));
-            if (has_string_type and t.pointer.is_const) {
+            if (hasStringType(t)) {
                 _ = try writer.writeByte('"');
                 const string = value;
 
@@ -199,6 +203,71 @@ fn serializeValue(state: *SerializerState, t: std.builtin.Type, value: anytype, 
     }
 }
 
-fn cmpField(_: void, lhs: StructField, rhs: StructField) bool {
+fn serializeMap(state: *SerializerState, value: anytype, writer: *std.io.AnyWriter) !void {
+    {
+        var key_iter = value.keyIterator();
+        const key_type = @typeInfo(@TypeOf(key_iter.next().?.*));
+        if (!hasStringType(key_type)) @panic("Maps with non-string compatible types cannot be serialized");
+    }
+
+    var value_iter = value.valueIterator();
+    const value_type = @TypeOf(value_iter.next().?.*);
+    const value_tinfo = @typeInfo(value_type);
+
+    var fields = try state.allocator.alloc([]const u8, value.count());
+    defer state.allocator.free(fields);
+    var key_iter = value.keyIterator();
+
+    var counter: u32 = 0;
+    while (key_iter.next()) |key| {
+        fields[counter] = key.*;
+        counter += 1;
+    }
+    std.mem.sortUnstable([]const u8, fields, {}, cmpStrings);
+
+    if (value_tinfo != .@"struct" and comptime !isPointerToStruct(value_tinfo)) {
+        for (fields) |field| {
+            try writer.print("{s} = ", .{field});
+            try serializeValue(state, value_tinfo, value.get(field).?, writer);
+            _ = try writer.write("\n");
+        }
+    } else if (isMapType(value_type)) {
+        for (fields) |field| {
+            try state.table_comp.append(field);
+            try writer.writeByte('[');
+            for (0..state.table_comp.items.len - 1) |i| {
+                try writer.print("{s}.", .{state.table_comp.items[i]});
+            }
+            try writer.print("{s}]\n", .{field});
+            try serializeMap(state, value.get(field).?, writer);
+            _ = state.table_comp.pop();
+        }
+    } else {
+        for (fields) |field| {
+            try state.table_comp.append(field);
+            try writer.writeByte('[');
+            for (0..state.table_comp.items.len - 1) |i| {
+                try writer.print("{s}.", .{state.table_comp.items[i]});
+            }
+            try writer.print("{s}]\n", .{field});
+            try serializeStruct(state, value.get(field).?, writer);
+            _ = state.table_comp.pop();
+        }
+    }
+}
+
+inline fn hasStringType(t: std.builtin.Type) bool {
+    return ((t.pointer.child == u8 and t.pointer.size == .slice) or (@typeInfo(t.pointer.child) == .array and @typeInfo(t.pointer.child).array.child == u8) and t.pointer.is_const);
+}
+
+inline fn isMapType(val_t: type) bool {
+    return @hasDecl(val_t, "keyIterator") and @hasDecl(val_t, "valueIterator") and @hasDecl(val_t, "iterator");
+}
+
+fn cmpFields(_: void, lhs: StructField, rhs: StructField) bool {
     return std.mem.order(u8, lhs.name, rhs.name) == .lt;
+}
+
+fn cmpStrings(_: void, lhs: []const u8, rhs: []const u8) bool {
+    return std.mem.order(u8, lhs, rhs) == .lt;
 }
