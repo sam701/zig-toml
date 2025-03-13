@@ -446,12 +446,12 @@ test "tables with no basic value" {
 
 test "simple value maps" {
     var hashmap = std.StringHashMap(usize).init(testing.allocator);
+    defer hashmap.deinit();
     try hashmap.put("a", 1);
     try hashmap.put("b", 2);
     try hashmap.put("c", 3);
     try hashmap.put("d", 4);
     try hashmap.put("e", 5);
-    defer hashmap.deinit();
 
     const result =
         \\a = 1
@@ -478,10 +478,10 @@ test "maps with structs" {
     const t3 = TestStruct{ .field1 = 3 };
 
     var hashmap = std.StringHashMap(TestStruct).init(testing.allocator);
+    defer hashmap.deinit();
     try hashmap.put("a", t1);
     try hashmap.put("b", t2);
     try hashmap.put("c", t3);
-    defer hashmap.deinit();
 
     const result =
         \\[a]
@@ -504,6 +504,10 @@ test "maps with maps" {
     var hashmap1 = std.StringHashMap(usize).init(testing.allocator);
     var hashmap2 = std.StringHashMap(usize).init(testing.allocator);
     var hashmap3 = std.StringHashMap(usize).init(testing.allocator);
+    defer hashmap.deinit();
+    defer hashmap1.deinit();
+    defer hashmap2.deinit();
+    defer hashmap3.deinit();
 
     try hashmap1.put("a1", 1);
     try hashmap1.put("a2", 2);
@@ -516,11 +520,6 @@ test "maps with maps" {
     try hashmap3.put("c1", 1);
     try hashmap3.put("c2", 2);
     try hashmap3.put("c3", 3);
-
-    defer hashmap.deinit();
-    defer hashmap1.deinit();
-    defer hashmap2.deinit();
-    defer hashmap3.deinit();
 
     try hashmap.put("a", hashmap1);
     try hashmap.put("b", hashmap2);
