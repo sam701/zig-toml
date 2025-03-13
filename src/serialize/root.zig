@@ -62,8 +62,7 @@ fn serializeStruct(state: *SerializerState, value: anytype, writer: *AnyWriter) 
             return;
         },
         else => {
-            const is_map = @hasDecl(@TypeOf(value), "keyIterator") and @hasDecl(@TypeOf(value), "valueIterator") and @hasDecl(@TypeOf(value), "iterator");
-            if (is_map) {
+            if (isMapType(@TypeOf(value))) {
                 return serializeMap(state, value, writer);
             }
         },
