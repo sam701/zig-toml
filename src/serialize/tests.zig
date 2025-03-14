@@ -443,3 +443,152 @@ test "tables with no basic value" {
     try serialize(Allocator, t, &writer);
     try testing.expectEqualSlices(u8, result, ba.constSlice());
 }
+
+test "simple value maps" {
+    var hashmap = std.StringHashMap(usize).init(testing.allocator);
+    defer hashmap.deinit();
+    try hashmap.put("a", 1);
+    try hashmap.put("b", 2);
+    try hashmap.put("c", 3);
+    try hashmap.put("d", 4);
+    try hashmap.put("e", 5);
+
+    const result =
+        \\a = 1
+        \\b = 2
+        \\c = 3
+        \\d = 4
+        \\e = 5
+        \\
+    ;
+
+    var ba = try std.BoundedArray(u8, 512).init(0);
+    var writer = ba.writer().any();
+    try serialize(Allocator, hashmap, &writer);
+    try testing.expectEqualSlices(u8, result, ba.constSlice());
+}
+
+test "maps with structs" {
+    const TestStruct = struct {
+        field1: usize,
+    };
+
+    const t1 = TestStruct{ .field1 = 1 };
+    const t2 = TestStruct{ .field1 = 2 };
+    const t3 = TestStruct{ .field1 = 3 };
+
+    var hashmap = std.StringHashMap(TestStruct).init(testing.allocator);
+    defer hashmap.deinit();
+    try hashmap.put("a", t1);
+    try hashmap.put("b", t2);
+    try hashmap.put("c", t3);
+
+    const result =
+        \\[a]
+        \\field1 = 1
+        \\[b]
+        \\field1 = 2
+        \\[c]
+        \\field1 = 3
+        \\
+    ;
+
+    var ba = try std.BoundedArray(u8, 512).init(0);
+    var writer = ba.writer().any();
+    try serialize(Allocator, hashmap, &writer);
+    try testing.expectEqualSlices(u8, result, ba.constSlice());
+}
+
+test "maps with maps" {
+    var hashmap = std.StringHashMap(std.StringHashMap(usize)).init(testing.allocator);
+    var hashmap1 = std.StringHashMap(usize).init(testing.allocator);
+    var hashmap2 = std.StringHashMap(usize).init(testing.allocator);
+    var hashmap3 = std.StringHashMap(usize).init(testing.allocator);
+    defer hashmap.deinit();
+    defer hashmap1.deinit();
+    defer hashmap2.deinit();
+    defer hashmap3.deinit();
+
+    try hashmap1.put("a1", 1);
+    try hashmap1.put("a2", 2);
+    try hashmap1.put("a3", 3);
+
+    try hashmap2.put("b1", 1);
+    try hashmap2.put("b2", 2);
+    try hashmap2.put("b3", 3);
+
+    try hashmap3.put("c1", 1);
+    try hashmap3.put("c2", 2);
+    try hashmap3.put("c3", 3);
+
+    try hashmap.put("a", hashmap1);
+    try hashmap.put("b", hashmap2);
+    try hashmap.put("c", hashmap3);
+
+    const result =
+        \\[a]
+        \\a1 = 1
+        \\a2 = 2
+        \\a3 = 3
+        \\[b]
+        \\b1 = 1
+        \\b2 = 2
+        \\b3 = 3
+        \\[c]
+        \\c1 = 1
+        \\c2 = 2
+        \\c3 = 3
+        \\
+    ;
+
+    var ba = try std.BoundedArray(u8, 512).init(0);
+    var writer = ba.writer().any();
+    try serialize(Allocator, hashmap, &writer);
+    try testing.expectEqualSlices(u8, result, ba.constSlice());
+}
+
+test "structs containing maps" {
+    const TestStruct = struct {
+        field1: std.StringHashMap(usize) = std.StringHashMap(usize).init(testing.allocator),
+        field2: std.StringHashMap(usize) = std.StringHashMap(usize).init(testing.allocator),
+        field3: std.StringHashMap(usize) = std.StringHashMap(usize).init(testing.allocator),
+    };
+
+    var t = TestStruct{};
+    defer t.field1.deinit();
+    defer t.field2.deinit();
+    defer t.field3.deinit();
+
+    try t.field1.put("a", 1);
+    try t.field1.put("b", 2);
+    try t.field1.put("c", 3);
+
+    try t.field2.put("a", 1);
+    try t.field2.put("b", 2);
+    try t.field2.put("c", 3);
+
+    try t.field3.put("a", 1);
+    try t.field3.put("b", 2);
+    try t.field3.put("c", 3);
+
+    const result =
+        \\[field1]
+        \\a = 1
+        \\b = 2
+        \\c = 3
+        \\[field2]
+        \\a = 1
+        \\b = 2
+        \\c = 3
+        \\[field3]
+        \\a = 1
+        \\b = 2
+        \\c = 3
+        \\
+    ;
+
+    var ba = try std.BoundedArray(u8, 512).init(0);
+    var writer = ba.writer().any();
+    try serialize(Allocator, t, &writer);
+    try testing.expectEqualSlices(u8, result, ba.constSlice());
+}
