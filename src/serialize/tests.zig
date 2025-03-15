@@ -218,6 +218,74 @@ test "arrays" {
     ba.clear();
 }
 
+test "arrays containing complex objects" {
+    var ba = try std.BoundedArray(u8, 512).init(0);
+    var writer = ba.writer().any();
+
+    const TestStruct2 = struct {
+        field1: i32,
+        field2: f32,
+    };
+    const TestStruct = struct {
+        field1: [2]TestStruct2,
+        field2: [2]*const TestStruct2,
+        field3: [2]std.StringHashMap(usize),
+    };
+
+    const tp1 = TestStruct2{
+        .field1 = 100,
+        .field2 = 0.1,
+    };
+    const tp2 = TestStruct2{
+        .field1 = 200,
+        .field2 = 0.2,
+    };
+
+    var hashmap1 = std.StringHashMap(usize).init(testing.allocator);
+    var hashmap2 = std.StringHashMap(usize).init(testing.allocator);
+    defer hashmap1.deinit();
+    defer hashmap2.deinit();
+    try hashmap1.put("a", 1);
+    try hashmap1.put("b", 2);
+    try hashmap1.put("c", 3);
+    try hashmap2.put("d", 4);
+    try hashmap2.put("e", 5);
+    try hashmap2.put("f", 6);
+
+    const t = TestStruct{
+        .field1 = [_]TestStruct2{ TestStruct2{ .field1 = 10, .field2 = 2.71 }, TestStruct2{ .field1 = 20, .field2 = 3.14 } },
+        .field2 = [_]*const TestStruct2{ &tp1, &tp2 },
+        .field3 = [_]std.StringHashMap(usize){ hashmap1, hashmap2 },
+    };
+
+    const result =
+        \\[[field1]]
+        \\field1 = 10
+        \\field2 = 2.71
+        \\[[field1]]
+        \\field1 = 20
+        \\field2 = 3.14
+        \\[[field2]]
+        \\field1 = 100
+        \\field2 = 0.1
+        \\[[field2]]
+        \\field1 = 200
+        \\field2 = 0.2
+        \\[[field3]]
+        \\a = 1
+        \\b = 2
+        \\c = 3
+        \\[[field3]]
+        \\d = 4
+        \\e = 5
+        \\f = 6
+        \\
+    ;
+
+    try serialize(Allocator, t, &writer);
+    try testing.expectEqualSlices(u8, result, ba.constSlice());
+}
+
 test "structs" {
     var ba = try std.BoundedArray(u8, 512).init(0);
     var writer = ba.writer().any();

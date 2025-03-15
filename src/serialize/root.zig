@@ -82,7 +82,44 @@ fn serializeStruct(state: *SerializerState, value: anytype, writer: *AnyWriter) 
     inline for (fields) |field| {
         const ftype = @typeInfo(field.type);
 
-        if (ftype != .@"struct" and comptime !isPointerToStruct(ftype)) {
+        if (ftype == .array) {
+            const child_t = @typeInfo(ftype.array.child);
+            try state.table_comp.append(field.name);
+            if (child_t == .@"struct" and isMapType(ftype.array.child)) {
+                for (@field(value, field.name)) |v| {
+                    _ = try writer.write("[[");
+                    for (0..state.table_comp.items.len - 1) |i| {
+                        try writer.print("{s}.", .{state.table_comp.items[i]});
+                    }
+                    try writer.print("{s}]]\n", .{field.name});
+                    try serializeMap(state, v, writer);
+                }
+            } else if (child_t == .@"struct") {
+                for (@field(value, field.name)) |v| {
+                    _ = try writer.write("[[");
+                    for (0..state.table_comp.items.len - 1) |i| {
+                        try writer.print("{s}.", .{state.table_comp.items[i]});
+                    }
+                    try writer.print("{s}]]\n", .{field.name});
+                    try serializeStruct(state, v, writer);
+                }
+            } else if (comptime isPointerToStruct(child_t)) {
+                for (@field(value, field.name)) |v| {
+                    while (@typeInfo(@TypeOf(@typeInfo(@TypeOf(v)).pointer.child)) == .pointer) v = v.*;
+                    _ = try writer.write("[[");
+                    for (0..state.table_comp.items.len - 1) |i| {
+                        try writer.print("{s}.", .{state.table_comp.items[i]});
+                    }
+                    try writer.print("{s}]]\n", .{field.name});
+                    try serializeStruct(state, v.*, writer);
+                }
+            } else {
+                try writer.print("{s} = ", .{field.name});
+                try serializeValue(state, ftype, @field(value, field.name), writer);
+                _ = try writer.write("\n");
+            }
+            _ = state.table_comp.pop();
+        } else if (ftype != .@"struct" and comptime !isPointerToStruct(ftype)) {
             try writer.print("{s} = ", .{field.name});
             try serializeValue(state, ftype, @field(value, field.name), writer);
             _ = try writer.write("\n");
