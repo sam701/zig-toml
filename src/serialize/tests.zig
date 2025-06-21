@@ -1,5 +1,5 @@
 const std = @import("std");
-const serialize = @import("./root.zig").serialize;
+const serialize = @import("../main.zig").serialize;
 const testing = std.testing;
 const Allocator = testing.allocator;
 const datetime = @import("../datetime.zig");
