@@ -1,4 +1,5 @@
 # zig-toml
+[![Zig Docs](https://img.shields.io/badge/docs-zig-%23f7a41d)](https://sam701.github.io/zig-toml)
 
 Zig [TOML v1.0.0](https://toml.io/en/v1.0.0) parser.
 
@@ -54,7 +55,7 @@ See [`example1.zig`](./examples/example1.zig) for the complete code that parses 
 
 Run it with `zig build examples`
 ```zig
-// .... 
+// ....
 
 const Address = struct {
     port: i64,

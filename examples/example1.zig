@@ -1,5 +1,5 @@
 const std = @import("std");
-const toml = @import("zig-toml");
+const toml = @import("toml");
 
 var gpa = std.heap.GeneralPurposeAllocator(.{}){};
 const allocator = gpa.allocator();

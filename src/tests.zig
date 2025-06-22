@@ -1,6 +1,6 @@
 const std = @import("std");
 const testing = std.testing;
-const main = @import("./main.zig");
+const main = @import("./root.zig");
 const struct_mapping = @import("./struct_mapping.zig");
 const datetime = @import("./datetime.zig");
 const Table = @import("./table.zig").Table;
