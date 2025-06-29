@@ -17,16 +17,37 @@ pub fn parse(ctx: *parser.Context) !?*value.ValueList {
     errdefer ar.deinit();
 
     while (true) {
-        const val = try value.parse(ctx);
-        try ar.append(val);
-        comment.skipSpacesAndComments(ctx);
-        parser.consumeString(ctx, ",") catch {};
-        comment.skipSpacesAndComments(ctx);
         if (parser.consumeString(ctx, "]")) |_| {
             break;
         } else |_| {}
+
+        const val = try value.parse(ctx);
+        try ar.append(val);
+        comment.skipSpacesAndComments(ctx);
+        parser.consumeString(ctx, ",") catch |e| {
+            if (parser.consumeString(ctx, "]")) |_| {
+                break;
+            } else |_| {
+                return e;
+            }
+        };
+        comment.skipSpacesAndComments(ctx);
     }
     return ar;
+}
+
+test "empty array" {
+    var ctx = parser.testInput("[]");
+    const ar = (try parse(&ctx)).?;
+
+    try testing.expect(ar.items.len == 0);
+
+    (value.Value{ .array = ar }).deinit(ctx.alloc);
+}
+
+test "array without commas" {
+    var ctx = parser.testInput("[1 2]");
+    try testing.expectError(error.UnexpectedToken, parse(&ctx));
 }
 
 test "array" {
