@@ -4,13 +4,11 @@ on:
     branches:
       - '**'
   pull_request: {}
-  schedule:
-    - cron: 15 4 * * *
 jobs:
   build-and-test:
     strategy:
       matrix:
-        zig-version: ['master']
+        zig-version: ['0.14.1']
 
     runs-on: ubuntu-latest
     name: Test / Zig ${{ matrix.zig-version }}
