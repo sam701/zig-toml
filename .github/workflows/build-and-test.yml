@@ -2,8 +2,10 @@ name: build-and-test
 on:
   push:
     branches:
-      - '**'
-  pull_request: {}
+      - main
+  pull_request:
+    branches:
+      - main
 jobs:
   build-and-test:
     strategy:
