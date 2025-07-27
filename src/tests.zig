@@ -151,10 +151,10 @@ test "parse into struct" {
     try testing.expectEqual(11, aa.hm2.map.get("f3").?.bb);
 }
 
-test "optionals (--release=fast)" {
+test "optionals (--release=fast/safe)" {
     const Sub = struct {
         id: u16,
-        name: []const u8,
+        name: ?[]const u8,
     };
 
     const Opts = struct {
@@ -174,7 +174,7 @@ test "optionals (--release=fast)" {
 
     try std.testing.expect(m.sub != null);
     try std.testing.expectEqual(12, m.sub.?.id);
-    try std.testing.expectEqualStrings("world", m.sub.?.name);
+    try std.testing.expectEqualStrings("world", m.sub.?.name.?);
 }
 
 test "deinit table" {

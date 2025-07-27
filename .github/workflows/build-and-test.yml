@@ -23,6 +23,7 @@ jobs:
       - run: zig build
       - run: zig build test
       - run: zig build test --release=fast
+      - run: zig build test --release=safe
       - run: zig build docs
       - name: Upload artifact
         if: github.ref == 'refs/heads/main' && github.event_name != 'schedule'
