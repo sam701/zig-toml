@@ -11,9 +11,11 @@ pub fn build(b: *std.Build) void {
     });
 
     const main_tests = b.addTest(.{
-        .root_source_file = b.path("src/tests.zig"),
-        .target = targetOpt,
-        .optimize = optimizeOpt,
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("src/tests.zig"),
+            .target = targetOpt,
+            .optimize = optimizeOpt,
+        }),
     });
 
     const run_tests = b.addRunArtifact(main_tests);
@@ -24,9 +26,11 @@ pub fn build(b: *std.Build) void {
     {
         const example1 = b.addExecutable(.{
             .name = "example1",
-            .root_source_file = b.path("examples/example1.zig"),
-            .target = targetOpt,
-            .optimize = optimizeOpt,
+            .root_module = b.createModule(.{
+                .root_source_file = b.path("examples/example1.zig"),
+                .target = targetOpt,
+                .optimize = optimizeOpt,
+            }),
         });
         example1.root_module.addImport("toml", module);
         b.installArtifact(example1);
