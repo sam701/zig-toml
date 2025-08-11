@@ -26,7 +26,7 @@ const SerializerState = struct {
     }
 };
 
-pub fn serialize(allocator: Allocator, obj: anytype, writer: *AnyWriter) !void {
+pub fn serialize(allocator: Allocator, obj: anytype, writer: *std.Io.Writer) !void {
     const ttype = @TypeOf(obj);
     const tinfo = @typeInfo(ttype);
     var state = SerializerState.init(allocator);
@@ -34,7 +34,7 @@ pub fn serialize(allocator: Allocator, obj: anytype, writer: *AnyWriter) !void {
     try serializeValue(&state, tinfo, obj, writer);
 }
 
-fn serializeStruct(state: *SerializerState, value: anytype, writer: *AnyWriter) !void {
+fn serializeStruct(state: *SerializerState, value: anytype, writer: *std.Io.Writer) !void {
     const ttype = @TypeOf(value);
     const tinfo = @typeInfo(ttype);
     if (tinfo != .@"struct") @panic("non struct type given to serialize");
@@ -172,7 +172,7 @@ fn isPointerToStruct(t: std.builtin.Type) bool {
     return child == .@"struct";
 }
 
-fn serializeValue(state: *SerializerState, t: std.builtin.Type, value: anytype, writer: *AnyWriter) !void {
+fn serializeValue(state: *SerializerState, t: std.builtin.Type, value: anytype, writer: *std.Io.Writer) !void {
     switch (t) {
         .int, .float, .comptime_int, .comptime_float => {
             if (t == .float) {
@@ -247,7 +247,7 @@ fn serializeValue(state: *SerializerState, t: std.builtin.Type, value: anytype, 
     }
 }
 
-fn serializeMap(state: *SerializerState, value: anytype, writer: *std.io.AnyWriter) !void {
+fn serializeMap(state: *SerializerState, value: anytype, writer: *std.Io.Writer) !void {
     {
         var key_iter = value.keyIterator();
         const key_type = @typeInfo(@TypeOf(key_iter.next().?.*));
