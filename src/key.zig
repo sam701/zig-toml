@@ -43,18 +43,18 @@ pub const Key = union(enum) {
 };
 
 fn parseDotted(ctx: *parser.Context, first: parser.String) !Key {
-    var ar = std.ArrayList(parser.String).init(ctx.alloc);
-    try ar.append(first);
+    var ar: std.ArrayListUnmanaged(parser.String) = .empty;
+    try ar.append(ctx.alloc, first);
     while (ctx.current()) |cur| {
         if (cur != '.') break;
 
         _ = ctx.next();
         spaces.skipSpaces(ctx);
         const next = try parseBareKey(ctx);
-        try ar.append(next);
+        try ar.append(ctx.alloc, next);
         spaces.skipSpaces(ctx);
     }
-    return Key{ .dotted = try ar.toOwnedSlice() };
+    return Key{ .dotted = try ar.toOwnedSlice(ctx.alloc) };
 }
 
 pub fn parse(ctx: *parser.Context) !Key {

@@ -10,7 +10,7 @@ pub fn parse(ctx: *Context) !?[]const u8 {
     return parseString(ctx, &delimiter);
 }
 
-const Buffer = std.ArrayList(u8);
+const Buffer = std.ArrayListUnmanaged(u8);
 
 pub fn parseSingleLine(ctx: *Context) !?[]const u8 {
     var ctx2 = ctx.*;
@@ -22,14 +22,14 @@ pub fn parseSingleLine(ctx: *Context) !?[]const u8 {
 }
 
 pub fn parseString(ctx: *Context, delimiter: *const Delimiter) !?[]const u8 {
-    var output = Buffer.init(ctx.alloc);
-    errdefer output.deinit();
+    var output: Buffer = .{};
+    errdefer output.deinit(ctx.alloc);
 
     while (ctx.current()) |c| {
         switch (c) {
             '\'', '\"' => {
                 if (try parseClosingDelimiter(ctx, delimiter)) {
-                    return try output.toOwnedSlice();
+                    return try output.toOwnedSlice(ctx.alloc);
                 }
             },
             '\r', '\n' => if (!delimiter.multiline) return error.InvalidCharacter,
@@ -39,7 +39,7 @@ pub fn parseString(ctx: *Context, delimiter: *const Delimiter) !?[]const u8 {
             },
             else => {},
         }
-        try output.append(c);
+        try output.append(ctx.alloc, c);
         _ = ctx.next();
     }
     return error.UnexpectedEOF;
@@ -68,13 +68,13 @@ fn parseEscaped(ctx: *Context, delimiter: *const Delimiter, output: *Buffer) !vo
     switch (c) {
         'u' => try parseUnicode(ctx, 4, output),
         'U' => try parseUnicode(ctx, 8, output),
-        'b' => try output.append(0x08),
-        'f' => try output.append(0x0c),
-        't' => try output.append('\t'),
-        'n' => try output.append('\n'),
-        'r' => try output.append('\r'),
-        '\"' => try output.append('\"'),
-        '\\' => try output.append('\\'),
+        'b' => try output.append(ctx.alloc, 0x08),
+        'f' => try output.append(ctx.alloc, 0x0c),
+        't' => try output.append(ctx.alloc, '\t'),
+        'n' => try output.append(ctx.alloc, '\n'),
+        'r' => try output.append(ctx.alloc, '\r'),
+        '\"' => try output.append(ctx.alloc, '\"'),
+        '\\' => try output.append(ctx.alloc, '\\'),
         '\r', '\n' => {
             if (delimiter.multiline) {
                 spaces.skipSpacesAndLineBreaks(ctx);
@@ -95,7 +95,7 @@ fn parseUnicode(ctx: *Context, size: u8, output: *Buffer) !void {
 
     var buf: [4]u8 = undefined;
     const len = try std.unicode.utf8Encode(codepoint, buf[0..]);
-    try output.appendSlice(buf[0..len]);
+    try output.appendSlice(ctx.alloc, buf[0..len]);
 }
 
 fn parseOpeningDelimiter(ctx: *Context) ?Delimiter {

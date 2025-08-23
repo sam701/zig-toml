@@ -10,7 +10,7 @@ const tablepkg = @import("./table.zig");
 const datetime = @import("./datetime.zig");
 const Table = tablepkg.Table;
 
-pub const ValueList = std.ArrayList(Value);
+pub const ValueList = std.ArrayListUnmanaged(Value);
 
 pub const Value = union(enum) {
     string: []const u8,
@@ -31,7 +31,7 @@ pub const Value = union(enum) {
                 for (ar.items) |element| {
                     element.deinit(alloc);
                 }
-                ar.deinit();
+                ar.deinit(alloc);
                 alloc.destroy(ar);
             },
             .table => |table| {

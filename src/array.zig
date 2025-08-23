@@ -13,8 +13,8 @@ pub fn parse(ctx: *parser.Context) !?*value.ValueList {
     var ar = try ctx.alloc.create(value.ValueList);
     errdefer ctx.alloc.destroy(ar);
 
-    ar.* = value.ValueList.init(ctx.alloc);
-    errdefer ar.deinit();
+    ar.* = .{};
+    errdefer ar.deinit(ctx.alloc);
 
     while (true) {
         if (parser.consumeString(ctx, "]")) |_| {
@@ -22,7 +22,7 @@ pub fn parse(ctx: *parser.Context) !?*value.ValueList {
         } else |_| {}
 
         const val = try value.parse(ctx);
-        try ar.append(val);
+        try ar.append(ctx.alloc, val);
         comment.skipSpacesAndComments(ctx);
         parser.consumeString(ctx, ",") catch |e| {
             if (parser.consumeString(ctx, "]")) |_| {
