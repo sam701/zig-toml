@@ -108,9 +108,9 @@ pub const String = struct {
         };
     }
 
-    pub fn fromList(l: *std.ArrayList(u8)) String {
+    pub fn fromList(alloc: std.mem.Allocator, l: *std.ArrayListUnmanaged(u8)) String {
         return String{
-            .content = l.toOwnedSlice(),
+            .content = l.toOwnedSlice(alloc),
             .allocated = true,
         };
     }
