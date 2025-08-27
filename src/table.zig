@@ -89,7 +89,7 @@ fn tableAdvance(ctx: *parser.Context, table: *Table, key: parser.String, new_arr
                     errdefer ctx.alloc.destroy(new_table);
                     new_table.* = Table.init(ctx.alloc);
                     const new_value = Value{ .table = new_table };
-                    try ar.append(new_value);
+                    try ar.append(ctx.alloc, new_value);
                     return new_table;
                 } else {
                     switch (ar.items[ar.items.len - 1]) {
@@ -109,8 +109,8 @@ fn tableAdvance(ctx: *parser.Context, table: *Table, key: parser.String, new_arr
         if (new_array_item) {
             var list = try ctx.alloc.create(ValueList);
             errdefer ctx.alloc.destroy(list);
-            list.* = ValueList.init(ctx.alloc);
-            try list.append(new_value);
+            list.* = try ValueList.initCapacity(ctx.alloc, 0);
+            try list.append(ctx.alloc, new_value);
             new_value = Value{ .array = list };
         }
         try setValue(ctx, table, key, new_value);

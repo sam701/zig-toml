@@ -10,10 +10,10 @@ pub const Context = struct {
     alloc: std.mem.Allocator,
     field_path: std.ArrayList([]const u8),
 
-    pub fn init(alloc: std.mem.Allocator) Context {
+    pub fn init(alloc: std.mem.Allocator) !Context {
         return .{
             .alloc = alloc,
-            .field_path = std.ArrayList([]const u8).init(alloc),
+            .field_path = try std.ArrayList([]const u8).initCapacity(alloc, 0),
         };
     }
 
@@ -30,7 +30,7 @@ pub fn intoStruct(ctx: *Context, comptime T: type, dest: *T, table: *Table) !voi
     switch (@typeInfo(T)) {
         .@"struct" => |info| {
             inline for (info.fields) |field_info| {
-                try ctx.field_path.append(field_info.name);
+                try ctx.field_path.append(ctx.alloc, field_info.name);
                 if (table.fetchRemove(field_info.name)) |entry| {
                     try setValue(ctx, field_info.type, &@field(dest.*, field_info.name), &entry.value);
                     ctx.alloc.free(entry.key);
@@ -146,7 +146,7 @@ fn setValue(ctx: *Context, comptime T: type, dest: *T, value: *const Value) !voi
                                 // TODO: set path
                             }
                             dest.* = dest_ar;
-                            ar.deinit();
+                            ar.deinit(ctx.alloc);
                             ctx.alloc.destroy(ar);
                         },
                         else => return error.InvalidValueType,

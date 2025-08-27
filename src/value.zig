@@ -31,7 +31,7 @@ pub const Value = union(enum) {
                 for (ar.items) |element| {
                     element.deinit(alloc);
                 }
-                ar.deinit();
+                ar.deinit(alloc);
                 alloc.destroy(ar);
             },
             .table => |table| {

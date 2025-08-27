@@ -127,7 +127,7 @@ pub fn Parser(comptime Target: type) type {
                 return .{ .arena = arena, .value = tab };
             }
 
-            var mapping_ctx = struct_mapping.Context.init(alloc);
+            var mapping_ctx = try struct_mapping.Context.init(alloc);
 
             var dest: Target = undefined;
             struct_mapping.intoStruct(&mapping_ctx, Target, &dest, &tab) catch |err| {
