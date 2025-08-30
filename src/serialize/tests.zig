@@ -8,68 +8,68 @@ const Time = datetime.Time;
 const DateTime = datetime.DateTime;
 
 test "basic literals" {
-    var ba = try std.BoundedArray(u8, 16).init(0);
-    var writer = ba.writer().any();
+    var buf: [64]u8 = undefined;
+    var writer = std.Io.Writer.fixed(&buf);
 
     // Comptime integers
     try serialize(Allocator, 127, &writer);
-    try testing.expectEqualSlices(u8, "127", ba.constSlice());
-    ba.clear();
+    try testing.expectEqualSlices(u8, "127", writer.buffered());
+    writer.end = 0;
 
     try serialize(Allocator, -127, &writer);
-    try testing.expectEqualSlices(u8, "-127", ba.constSlice());
-    ba.clear();
+    try testing.expectEqualSlices(u8, "-127", writer.buffered());
+    writer.end = 0;
 
     // Runtime integers
     var n: i16 = 127;
     try serialize(Allocator, n, &writer);
-    try testing.expectEqualSlices(u8, "127", ba.constSlice());
-    ba.clear();
+    try testing.expectEqualSlices(u8, "127", writer.buffered());
+    writer.end = 0;
 
     n = -127;
     try serialize(Allocator, n, &writer);
-    try testing.expectEqualSlices(u8, "-127", ba.constSlice());
-    ba.clear();
+    try testing.expectEqualSlices(u8, "-127", writer.buffered());
+    writer.end = 0;
 
     // Booleans
     try serialize(Allocator, true, &writer);
-    try testing.expectEqualSlices(u8, "true", ba.constSlice());
-    ba.clear();
+    try testing.expectEqualSlices(u8, "true", writer.buffered());
+    writer.end = 0;
 
     try serialize(Allocator, false, &writer);
-    try testing.expectEqualSlices(u8, "false", ba.constSlice());
-    ba.clear();
+    try testing.expectEqualSlices(u8, "false", writer.buffered());
+    writer.end = 0;
 }
 
 test "infinities" {
-    var ba = try std.BoundedArray(u8, 16).init(0);
-    var writer = ba.writer().any();
+    var buf: [64]u8 = undefined;
+    var writer = std.Io.Writer.fixed(&buf);
 
     try serialize(Allocator, std.math.inf(f32), &writer);
-    try testing.expectEqualSlices(u8, "inf", ba.constSlice());
-    ba.clear();
+    try testing.expectEqualSlices(u8, "inf", writer.buffered());
+    writer.end = 0;
 
     try serialize(Allocator, -std.math.inf(f32), &writer);
-    try testing.expectEqualSlices(u8, "-inf", ba.constSlice());
-    ba.clear();
+    try testing.expectEqualSlices(u8, "-inf", writer.buffered());
+    writer.end = 0;
 
     try serialize(Allocator, std.math.inf(f64), &writer);
-    try testing.expectEqualSlices(u8, "inf", ba.constSlice());
-    ba.clear();
+    try testing.expectEqualSlices(u8, "inf", writer.buffered());
+    writer.end = 0;
 
     try serialize(Allocator, -std.math.inf(f64), &writer);
-    try testing.expectEqualSlices(u8, "-inf", ba.constSlice());
-    ba.clear();
+    try testing.expectEqualSlices(u8, "-inf", writer.buffered());
+    writer.end = 0;
 }
 
 test "pointers" {
-    var ba = try std.BoundedArray(u8, 16).init(0);
-    var writer = ba.writer().any();
+    var buf: [64]u8 = undefined;
+    var writer = std.Io.Writer.fixed(&buf);
 
     const num: u8 = 127;
     try serialize(Allocator, &num, &writer);
-    try testing.expectEqualSlices(u8, "127", ba.constSlice());
-    ba.clear();
+    try testing.expectEqualSlices(u8, "127", writer.buffered());
+    writer.end = 0;
 }
 
 test "enums" {
@@ -82,24 +82,24 @@ test "enums" {
     };
 
     const color = Color.Blue;
-    var ba = try std.BoundedArray(u8, 16).init(0);
-    var writer = ba.writer().any();
+    var buf: [64]u8 = undefined;
+    var writer = std.Io.Writer.fixed(&buf);
     try serialize(Allocator, color, &writer);
-    try testing.expectEqualSlices(u8, "\"Blue\"", ba.constSlice());
-    ba.clear();
+    try testing.expectEqualSlices(u8, "\"Blue\"", writer.buffered());
+    writer.end = 0;
 }
 
 test "optionals" {
-    var ba = try std.BoundedArray(u8, 16).init(0);
-    var writer = ba.writer().any();
+    var buf: [64]u8 = undefined;
+    var writer = std.Io.Writer.fixed(&buf);
 
     var optval: ?u32 = null;
     try serialize(Allocator, optval, &writer);
-    try testing.expectEqualSlices(u8, "", ba.constSlice());
+    try testing.expectEqualSlices(u8, "", writer.buffered());
 
     optval = 100;
     try serialize(Allocator, optval, &writer);
-    try testing.expectEqualSlices(u8, "100", ba.constSlice());
+    try testing.expectEqualSlices(u8, "100", writer.buffered());
 }
 
 test "unions" {
@@ -110,117 +110,117 @@ test "unions" {
     };
 
     const u = MyUnion{ .f1 = 255 };
-    var ba = try std.BoundedArray(u8, 16).init(0);
-    var writer = ba.writer().any();
+    var buf: [64]u8 = undefined;
+    var writer = std.Io.Writer.fixed(&buf);
     try serialize(Allocator, u, &writer);
-    try testing.expectEqualSlices(u8, "255", ba.constSlice());
-    ba.clear();
+    try testing.expectEqualSlices(u8, "255", writer.buffered());
+    writer.end = 0;
 }
 
 test "strings" {
-    var ba = try std.BoundedArray(u8, 16).init(0);
-    var writer = ba.writer().any();
+    var buf: [64]u8 = undefined;
+    var writer = std.Io.Writer.fixed(&buf);
 
     // Basic string
     try serialize(Allocator, "hello world", &writer);
-    try testing.expectEqualSlices(u8, "\"hello world\"", ba.constSlice());
-    ba.clear();
+    try testing.expectEqualSlices(u8, "\"hello world\"", writer.buffered());
+    writer.end = 0;
 
     // String with escape chars
     try serialize(Allocator, "hello\nworld", &writer);
-    try testing.expectEqualSlices(u8, "\"hello\\nworld\"", ba.constSlice());
-    ba.clear();
+    try testing.expectEqualSlices(u8, "\"hello\\nworld\"", writer.buffered());
+    writer.end = 0;
 
     // String with escape quotes
     try serialize(Allocator, "hello\"world", &writer);
-    try testing.expectEqualSlices(u8, "\"hello\\\"world\"", ba.constSlice());
-    ba.clear();
+    try testing.expectEqualSlices(u8, "\"hello\\\"world\"", writer.buffered());
+    writer.end = 0;
 
     // String with backslashes
     try serialize(Allocator, "hello\\world", &writer);
-    try testing.expectEqualSlices(u8, "\"hello\\\\world\"", ba.constSlice());
-    ba.clear();
+    try testing.expectEqualSlices(u8, "\"hello\\\\world\"", writer.buffered());
+    writer.end = 0;
 
     // String with escape quotes and backslashes
     try serialize(Allocator, "hello\\\"world", &writer);
-    try testing.expectEqualSlices(u8, "\"hello\\\\\\\"world\"", ba.constSlice());
-    ba.clear();
+    try testing.expectEqualSlices(u8, "\"hello\\\\\\\"world\"", writer.buffered());
+    writer.end = 0;
 }
 
 test "date times" {
-    var ba = try std.BoundedArray(u8, 64).init(0);
-    var writer = ba.writer().any();
+    var buf: [64]u8 = undefined;
+    var writer = std.Io.Writer.fixed(&buf);
 
     try serialize(Allocator, Date{ .day = 1, .month = 2, .year = 2025 }, &writer);
-    try testing.expectEqualSlices(u8, "2025-02-01", ba.constSlice());
-    ba.clear();
+    try testing.expectEqualSlices(u8, "2025-02-01", writer.buffered());
+    writer.end = 0;
 
     try serialize(Allocator, Time{ .hour = 15, .minute = 5, .second = 0 }, &writer);
-    try testing.expectEqualSlices(u8, "15:05:00", ba.constSlice());
-    ba.clear();
+    try testing.expectEqualSlices(u8, "15:05:00", writer.buffered());
+    writer.end = 0;
 
     try serialize(Allocator, Time{ .hour = 15, .minute = 5, .second = 0, .nanosecond = 123456789 }, &writer);
-    try testing.expectEqualSlices(u8, "15:05:00.123456789", ba.constSlice());
-    ba.clear();
+    try testing.expectEqualSlices(u8, "15:05:00.123456789", writer.buffered());
+    writer.end = 0;
 
     try serialize(Allocator, DateTime{
         .time = .{ .hour = 15, .minute = 5, .second = 0, .nanosecond = 123456789 },
         .date = .{ .day = 1, .month = 2, .year = 2025 },
         .offset_minutes = 150,
     }, &writer);
-    try testing.expectEqualSlices(u8, "2025-02-0115:05:00.123456789-02:30", ba.constSlice());
-    ba.clear();
+    try testing.expectEqualSlices(u8, "2025-02-0115:05:00.123456789-02:30", writer.buffered());
+    writer.end = 0;
 }
 
 test "escape codes" {
-    var ba = try std.BoundedArray(u8, 16).init(0);
-    var writer = ba.writer().any();
+    var buf: [64]u8 = undefined;
+    var writer = std.Io.Writer.fixed(&buf);
 
     try serialize(Allocator, "\n", &writer);
-    try testing.expectEqualSlices(u8, "\"\\n\"", ba.constSlice());
-    ba.clear();
+    try testing.expectEqualSlices(u8, "\"\\n\"", writer.buffered());
+    writer.end = 0;
 
     try serialize(Allocator, "\t", &writer);
-    try testing.expectEqualSlices(u8, "\"\\t\"", ba.constSlice());
-    ba.clear();
+    try testing.expectEqualSlices(u8, "\"\\t\"", writer.buffered());
+    writer.end = 0;
 
     try serialize(Allocator, "\r", &writer);
-    try testing.expectEqualSlices(u8, "\"\\r\"", ba.constSlice());
-    ba.clear();
+    try testing.expectEqualSlices(u8, "\"\\r\"", writer.buffered());
+    writer.end = 0;
 
     try serialize(Allocator, "\\", &writer);
-    try testing.expectEqualSlices(u8, "\"\\\\\"", ba.constSlice());
-    ba.clear();
+    try testing.expectEqualSlices(u8, "\"\\\\\"", writer.buffered());
+    writer.end = 0;
 
     try serialize(Allocator, "\x0C", &writer);
-    try testing.expectEqualSlices(u8, "\"\\f\"", ba.constSlice());
-    ba.clear();
+    try testing.expectEqualSlices(u8, "\"\\f\"", writer.buffered());
+    writer.end = 0;
 
     try serialize(Allocator, "\x08", &writer);
-    try testing.expectEqualSlices(u8, "\"\\b\"", ba.constSlice());
-    ba.clear();
+    try testing.expectEqualSlices(u8, "\"\\b\"", writer.buffered());
+    writer.end = 0;
 }
 
 test "arrays" {
-    var ba = try std.BoundedArray(u8, 64).init(0);
-    var writer = ba.writer().any();
+    var buf: [64]u8 = undefined;
+    var writer = std.Io.Writer.fixed(&buf);
 
     try serialize(Allocator, [_]usize{ 10, 20, 30, 40, 50 }, &writer);
-    try testing.expectEqualSlices(u8, "[ 10, 20, 30, 40, 50 ]", ba.constSlice());
-    ba.clear();
+    try testing.expectEqualSlices(u8, "[ 10, 20, 30, 40, 50 ]", writer.buffered());
+    writer.end = 0;
 
     try serialize(Allocator, [_][]const u8{ "this", "is", "a", "string" }, &writer);
-    try testing.expectEqualSlices(u8, "[ \"this\", \"is\", \"a\", \"string\" ]", ba.constSlice());
-    ba.clear();
+    try testing.expectEqualSlices(u8, "[ \"this\", \"is\", \"a\", \"string\" ]", writer.buffered());
+    writer.end = 0;
 
     try serialize(Allocator, [_][3]usize{ [_]usize{ 1, 2, 3 }, [_]usize{ 4, 5, 6 }, [_]usize{ 7, 8, 9 } }, &writer);
-    try testing.expectEqualSlices(u8, "[ [ 1, 2, 3 ], [ 4, 5, 6 ], [ 7, 8, 9 ] ]", ba.constSlice());
-    ba.clear();
+    try testing.expectEqualSlices(u8, "[ [ 1, 2, 3 ], [ 4, 5, 6 ], [ 7, 8, 9 ] ]", writer.buffered());
+    writer.end = 0;
 }
 
 test "arrays containing complex objects" {
-    var ba = try std.BoundedArray(u8, 512).init(0);
-    var writer = ba.writer().any();
+    var buf: [512]u8 = undefined;
+    var writer = std.Io.Writer.fixed(&buf);
 
     const TestStruct2 = struct {
         field1: i32,
@@ -283,12 +283,12 @@ test "arrays containing complex objects" {
     ;
 
     try serialize(Allocator, t, &writer);
-    try testing.expectEqualSlices(u8, result, ba.constSlice());
+    try testing.expectEqualSlices(u8, result, writer.buffered());
 }
 
 test "structs" {
-    var ba = try std.BoundedArray(u8, 512).init(0);
-    var writer = ba.writer().any();
+    var buf: [512]u8 = undefined;
+    var writer = std.Io.Writer.fixed(&buf);
 
     const TestStruct = struct {
         field1: i32,
@@ -319,12 +319,12 @@ test "structs" {
     ;
 
     try serialize(Allocator, t, &writer);
-    try testing.expectEqualSlices(u8, result, ba.constSlice());
+    try testing.expectEqualSlices(u8, result, writer.buffered());
 }
 
 test "tables follow top level fields" {
-    var ba = try std.BoundedArray(u8, 512).init(0);
-    var writer = ba.writer().any();
+    var buf: [512]u8 = undefined;
+    var writer = std.Io.Writer.fixed(&buf);
 
     const TestStruct2 = struct {
         field1: i32,
@@ -363,12 +363,12 @@ test "tables follow top level fields" {
     ;
 
     try serialize(Allocator, t, &writer);
-    try testing.expectEqualSlices(u8, result, ba.constSlice());
+    try testing.expectEqualSlices(u8, result, writer.buffered());
 }
 
 test "top level tables" {
-    var ba = try std.BoundedArray(u8, 512).init(0);
-    var writer = ba.writer().any();
+    var buf: [512]u8 = undefined;
+    var writer = std.Io.Writer.fixed(&buf);
 
     const TestStruct2 = struct {
         field1: i32,
@@ -407,12 +407,12 @@ test "top level tables" {
     ;
 
     try serialize(Allocator, t, &writer);
-    try testing.expectEqualSlices(u8, result, ba.constSlice());
+    try testing.expectEqualSlices(u8, result, writer.buffered());
 }
 
 test "sub tables" {
-    var ba = try std.BoundedArray(u8, 512).init(0);
-    var writer = ba.writer().any();
+    var buf: [512]u8 = undefined;
+    var writer = std.Io.Writer.fixed(&buf);
 
     const TestStruct3 = struct {
         field1: i32,
@@ -458,12 +458,12 @@ test "sub tables" {
     ;
 
     try serialize(Allocator, t, &writer);
-    try testing.expectEqualSlices(u8, result, ba.constSlice());
+    try testing.expectEqualSlices(u8, result, writer.buffered());
 }
 
 test "sort fields" {
-    var ba = try std.BoundedArray(u8, 512).init(0);
-    var writer = ba.writer().any();
+    var buf: [64]u8 = undefined;
+    var writer = std.Io.Writer.fixed(&buf);
 
     const TestStruct = struct {
         field3: i32,
@@ -479,12 +479,12 @@ test "sort fields" {
     ;
 
     try serialize(Allocator, t, &writer);
-    try testing.expectEqualSlices(u8, result, ba.constSlice());
+    try testing.expectEqualSlices(u8, result, writer.buffered());
 }
 
 test "tables with no basic value" {
-    var ba = try std.BoundedArray(u8, 512).init(0);
-    var writer = ba.writer().any();
+    var buf: [64]u8 = undefined;
+    var writer = std.Io.Writer.fixed(&buf);
 
     const TestStruct3 = struct {
         field3: i32,
@@ -509,7 +509,7 @@ test "tables with no basic value" {
     ;
 
     try serialize(Allocator, t, &writer);
-    try testing.expectEqualSlices(u8, result, ba.constSlice());
+    try testing.expectEqualSlices(u8, result, writer.buffered());
 }
 
 test "simple value maps" {
@@ -530,10 +530,10 @@ test "simple value maps" {
         \\
     ;
 
-    var ba = try std.BoundedArray(u8, 512).init(0);
-    var writer = ba.writer().any();
+    var buf: [64]u8 = undefined;
+    var writer = std.Io.Writer.fixed(&buf);
     try serialize(Allocator, hashmap, &writer);
-    try testing.expectEqualSlices(u8, result, ba.constSlice());
+    try testing.expectEqualSlices(u8, result, writer.buffered());
 }
 
 test "maps with structs" {
@@ -561,10 +561,10 @@ test "maps with structs" {
         \\
     ;
 
-    var ba = try std.BoundedArray(u8, 512).init(0);
-    var writer = ba.writer().any();
+    var buf: [64]u8 = undefined;
+    var writer = std.Io.Writer.fixed(&buf);
     try serialize(Allocator, hashmap, &writer);
-    try testing.expectEqualSlices(u8, result, ba.constSlice());
+    try testing.expectEqualSlices(u8, result, writer.buffered());
 }
 
 test "maps with maps" {
@@ -609,10 +609,10 @@ test "maps with maps" {
         \\
     ;
 
-    var ba = try std.BoundedArray(u8, 512).init(0);
-    var writer = ba.writer().any();
+    var buf: [128]u8 = undefined;
+    var writer = std.Io.Writer.fixed(&buf);
     try serialize(Allocator, hashmap, &writer);
-    try testing.expectEqualSlices(u8, result, ba.constSlice());
+    try testing.expectEqualSlices(u8, result, writer.buffered());
 }
 
 test "structs containing maps" {
@@ -655,8 +655,8 @@ test "structs containing maps" {
         \\
     ;
 
-    var ba = try std.BoundedArray(u8, 512).init(0);
-    var writer = ba.writer().any();
+    var buf: [128]u8 = undefined;
+    var writer = std.Io.Writer.fixed(&buf);
     try serialize(Allocator, t, &writer);
-    try testing.expectEqualSlices(u8, result, ba.constSlice());
+    try testing.expectEqualSlices(u8, result, writer.buffered());
 }

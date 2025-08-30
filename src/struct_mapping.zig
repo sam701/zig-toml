@@ -8,17 +8,17 @@ const datetime = @import("./datetime.zig");
 
 pub const Context = struct {
     alloc: std.mem.Allocator,
-    field_path: std.ArrayList([]const u8),
+    field_path: std.ArrayListUnmanaged([]const u8),
 
     pub fn init(alloc: std.mem.Allocator) Context {
         return .{
             .alloc = alloc,
-            .field_path = std.ArrayList([]const u8).init(alloc),
+            .field_path = .{},
         };
     }
 
     pub fn deinit(self: *Context) void {
-        self.field_path.deinit();
+        self.field_path.deinit(self.alloc);
     }
 };
 
@@ -30,7 +30,7 @@ pub fn intoStruct(ctx: *Context, comptime T: type, dest: *T, table: *Table) !voi
     switch (@typeInfo(T)) {
         .@"struct" => |info| {
             inline for (info.fields) |field_info| {
-                try ctx.field_path.append(field_info.name);
+                try ctx.field_path.append(ctx.alloc, field_info.name);
                 if (table.fetchRemove(field_info.name)) |entry| {
                     try setValue(ctx, field_info.type, &@field(dest.*, field_info.name), &entry.value);
                     ctx.alloc.free(entry.key);
@@ -38,7 +38,7 @@ pub fn intoStruct(ctx: *Context, comptime T: type, dest: *T, table: *Table) !voi
                     if (@typeInfo(field_info.type) == .optional)
                         @field(dest.*, field_info.name) = null
                     else if (field_info.default_value_ptr) |defaultValue| {
-                        @field(dest.*, field_info.name) = @as(*const field_info.type, @alignCast(@ptrCast(defaultValue))).*;
+                        @field(dest.*, field_info.name) = @as(*const field_info.type, @ptrCast(@alignCast(defaultValue))).*;
                     } else return error.MissingRequiredField;
                 }
                 _ = ctx.field_path.pop();
@@ -146,7 +146,7 @@ fn setValue(ctx: *Context, comptime T: type, dest: *T, value: *const Value) !voi
                                 // TODO: set path
                             }
                             dest.* = dest_ar;
-                            ar.deinit();
+                            ar.deinit(ctx.alloc);
                             ctx.alloc.destroy(ar);
                         },
                         else => return error.InvalidValueType,

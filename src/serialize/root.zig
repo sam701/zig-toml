@@ -10,23 +10,23 @@ const StructField = std.builtin.Type.StructField;
 
 const SerializerState = struct {
     allocator: Allocator,
-    table_comp: std.ArrayList([]const u8),
+    table_comp: std.ArrayListUnmanaged([]const u8),
 
     const Self = @This();
 
     fn init(allocator: Allocator) Self {
         return Self{
             .allocator = allocator,
-            .table_comp = std.ArrayList([]const u8).init(allocator),
+            .table_comp = .{},
         };
     }
 
     fn deinit(self: *Self) void {
-        self.table_comp.deinit();
+        self.table_comp.deinit(self.allocator);
     }
 };
 
-pub fn serialize(allocator: Allocator, obj: anytype, writer: *AnyWriter) !void {
+pub fn serialize(allocator: Allocator, obj: anytype, writer: *std.Io.Writer) !void {
     const ttype = @TypeOf(obj);
     const tinfo = @typeInfo(ttype);
     var state = SerializerState.init(allocator);
@@ -34,7 +34,7 @@ pub fn serialize(allocator: Allocator, obj: anytype, writer: *AnyWriter) !void {
     try serializeValue(&state, tinfo, obj, writer);
 }
 
-fn serializeStruct(state: *SerializerState, value: anytype, writer: *AnyWriter) !void {
+fn serializeStruct(state: *SerializerState, value: anytype, writer: *std.Io.Writer) !void {
     const ttype = @TypeOf(value);
     const tinfo = @typeInfo(ttype);
     if (tinfo != .@"struct") @panic("non struct type given to serialize");
@@ -84,7 +84,7 @@ fn serializeStruct(state: *SerializerState, value: anytype, writer: *AnyWriter) 
 
         if (ftype == .array) {
             const child_t = @typeInfo(ftype.array.child);
-            try state.table_comp.append(field.name);
+            try state.table_comp.append(state.allocator, field.name);
             if (child_t == .@"struct" and isMapType(ftype.array.child)) {
                 for (@field(value, field.name)) |v| {
                     _ = try writer.write("[[");
@@ -130,7 +130,7 @@ fn serializeStruct(state: *SerializerState, value: anytype, writer: *AnyWriter) 
         const ftype = @typeInfo(field.type);
         if (ftype != .@"struct" and comptime !isPointerToStruct(ftype)) continue;
 
-        try state.table_comp.append(field.name);
+        try state.table_comp.append(state.allocator, field.name);
 
         // Check if the struct comprises of fields which are basically other structs
         // If so, we don't write anything for this struct and instead write only the
@@ -172,7 +172,7 @@ fn isPointerToStruct(t: std.builtin.Type) bool {
     return child == .@"struct";
 }
 
-fn serializeValue(state: *SerializerState, t: std.builtin.Type, value: anytype, writer: *AnyWriter) !void {
+fn serializeValue(state: *SerializerState, t: std.builtin.Type, value: anytype, writer: *std.Io.Writer) !void {
     switch (t) {
         .int, .float, .comptime_int, .comptime_float => {
             if (t == .float) {
@@ -247,7 +247,7 @@ fn serializeValue(state: *SerializerState, t: std.builtin.Type, value: anytype, 
     }
 }
 
-fn serializeMap(state: *SerializerState, value: anytype, writer: *std.io.AnyWriter) !void {
+fn serializeMap(state: *SerializerState, value: anytype, writer: *std.Io.Writer) !void {
     {
         var key_iter = value.keyIterator();
         const key_type = @typeInfo(@TypeOf(key_iter.next().?.*));
@@ -277,7 +277,7 @@ fn serializeMap(state: *SerializerState, value: anytype, writer: *std.io.AnyWrit
         }
     } else if (isMapType(value_type)) {
         for (fields) |field| {
-            try state.table_comp.append(field);
+            try state.table_comp.append(state.allocator, field);
             try writer.writeByte('[');
             for (0..state.table_comp.items.len - 1) |i| {
                 try writer.print("{s}.", .{state.table_comp.items[i]});
@@ -288,7 +288,7 @@ fn serializeMap(state: *SerializerState, value: anytype, writer: *std.io.AnyWrit
         }
     } else {
         for (fields) |field| {
-            try state.table_comp.append(field);
+            try state.table_comp.append(state.allocator, field);
             try writer.writeByte('[');
             for (0..state.table_comp.items.len - 1) |i| {
                 try writer.print("{s}.", .{state.table_comp.items[i]});

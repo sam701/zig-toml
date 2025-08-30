@@ -84,10 +84,10 @@ pub fn Parser(comptime Target: type) type {
         }
 
         pub fn deinit(self: *Self) void {
-            self.free_error_info();
+            self.freeErrorInfo();
         }
 
-        fn free_error_info(self: *Self) void {
+        fn freeErrorInfo(self: *Self) void {
             if (self.error_info) |einfo| {
                 switch (einfo) {
                     .struct_mapping => |field_path| {
@@ -109,7 +109,7 @@ pub fn Parser(comptime Target: type) type {
         }
 
         pub fn parseString(self: *Self, input: []const u8) !Parsed(Target) {
-            self.free_error_info();
+            self.freeErrorInfo();
 
             var arena = std.heap.ArenaAllocator.init(self.alloc);
             errdefer arena.deinit();
@@ -119,7 +119,7 @@ pub fn Parser(comptime Target: type) type {
                 .alloc = alloc,
             };
             var tab = table.parseRootTable(&ctx) catch |err| {
-                self.free_error_info();
+                self.freeErrorInfo();
                 self.error_info = ErrorInfo{ .parse = ctx.position };
                 return err;
             };
@@ -131,11 +131,15 @@ pub fn Parser(comptime Target: type) type {
 
             var dest: Target = undefined;
             struct_mapping.intoStruct(&mapping_ctx, Target, &dest, &tab) catch |err| {
-                self.free_error_info();
+                self.freeErrorInfo();
                 self.error_info = ErrorInfo{ .struct_mapping = try self.alloc.dupe([]const u8, mapping_ctx.field_path.items) }; // i suspect this might leak memory (the outer array is copied, but not inner ones). But it doesn't seem to leak. Strange.
                 return err;
             };
             return .{ .arena = arena, .value = dest };
         }
     };
+}
+
+test {
+    _ = @import("./tests.zig");
 }
