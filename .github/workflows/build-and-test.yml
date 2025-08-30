@@ -1,14 +1,15 @@
 name: build-and-test
 on:
   push:
-  pull_request:
-    branches:
-      - main
+  pull_request: {}
+  schedule:
+    - cron: 0 4 * * *
+
 jobs:
   build-and-test:
     strategy:
       matrix:
-        zig-version: ['0.15.1']
+        zig-version: ['master']
 
     runs-on: ubuntu-latest
     name: Test / Zig ${{ matrix.zig-version }}
