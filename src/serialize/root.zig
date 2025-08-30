@@ -10,19 +10,19 @@ const StructField = std.builtin.Type.StructField;
 
 const SerializerState = struct {
     allocator: Allocator,
-    table_comp: std.ArrayList([]const u8),
+    table_comp: std.ArrayListUnmanaged([]const u8),
 
     const Self = @This();
 
     fn init(allocator: Allocator) Self {
         return Self{
             .allocator = allocator,
-            .table_comp = std.ArrayList([]const u8).init(allocator),
+            .table_comp = .{},
         };
     }
 
     fn deinit(self: *Self) void {
-        self.table_comp.deinit();
+        self.table_comp.deinit(self.allocator);
     }
 };
 
@@ -84,7 +84,7 @@ fn serializeStruct(state: *SerializerState, value: anytype, writer: *std.Io.Writ
 
         if (ftype == .array) {
             const child_t = @typeInfo(ftype.array.child);
-            try state.table_comp.append(field.name);
+            try state.table_comp.append(state.allocator, field.name);
             if (child_t == .@"struct" and isMapType(ftype.array.child)) {
                 for (@field(value, field.name)) |v| {
                     _ = try writer.write("[[");
@@ -130,7 +130,7 @@ fn serializeStruct(state: *SerializerState, value: anytype, writer: *std.Io.Writ
         const ftype = @typeInfo(field.type);
         if (ftype != .@"struct" and comptime !isPointerToStruct(ftype)) continue;
 
-        try state.table_comp.append(field.name);
+        try state.table_comp.append(state.allocator, field.name);
 
         // Check if the struct comprises of fields which are basically other structs
         // If so, we don't write anything for this struct and instead write only the
@@ -277,7 +277,7 @@ fn serializeMap(state: *SerializerState, value: anytype, writer: *std.Io.Writer)
         }
     } else if (isMapType(value_type)) {
         for (fields) |field| {
-            try state.table_comp.append(field);
+            try state.table_comp.append(state.allocator, field);
             try writer.writeByte('[');
             for (0..state.table_comp.items.len - 1) |i| {
                 try writer.print("{s}.", .{state.table_comp.items[i]});
@@ -288,7 +288,7 @@ fn serializeMap(state: *SerializerState, value: anytype, writer: *std.Io.Writer)
         }
     } else {
         for (fields) |field| {
-            try state.table_comp.append(field);
+            try state.table_comp.append(state.allocator, field);
             try writer.writeByte('[');
             for (0..state.table_comp.items.len - 1) |i| {
                 try writer.print("{s}.", .{state.table_comp.items[i]});
