@@ -1,7 +1,7 @@
 name: build-and-test
 on:
   push:
-  pull_request: {}
+  pull_request:
   schedule:
     - cron: 0 4 * * *
 
@@ -15,7 +15,7 @@ jobs:
     name: Test / Zig ${{ matrix.zig-version }}
     steps:
       - uses: actions/checkout@v4
-      - uses: goto-bus-stop/setup-zig@v2
+      - uses: mlugg/setup-zig@v2
         with:
           version: ${{ matrix.zig-version }}
       - run: zig fmt --check ./*.zig src/*.zig
