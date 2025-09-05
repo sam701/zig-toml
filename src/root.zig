@@ -102,7 +102,10 @@ pub fn Parser(comptime Target: type) type {
             const file = try std.fs.cwd().openFile(filename, .{});
             defer file.close();
 
-            const content = try file.readToEndAlloc(self.alloc, 1024 * 1024 * 1024);
+            const size = try file.getEndPos();
+            const content = try self.alloc.alloc(u8, size);
+
+            _ = try file.readAll(content);
             defer self.alloc.free(content);
 
             return self.parseString(content);
