@@ -83,11 +83,15 @@ const Parser = struct {
         const ti = @typeInfo(T);
 
         const token = try self.nextToken(true);
+        // std.debug.print("kind = {}, context = {s} loc = {any}\n", .{ token.kind, token.content, token.location });
         switch (ti) {
             .int => {
-                // std.debug.print("kind = {}, context = {s} loc = {any}\n", .{ token.kind, token.content, token.location });
                 if (token.kind != .number) return error.InvalidValueType;
                 return std.fmt.parseInt(T, token.content, 0);
+            },
+            .float => {
+                if (token.kind != .number) return error.InvalidValueType;
+                return std.fmt.parseFloat(T, token.content);
             },
 
             else => {},
