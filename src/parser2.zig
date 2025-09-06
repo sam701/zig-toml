@@ -100,6 +100,19 @@ const Parser = struct {
                     else => return error.InvalidValueType,
                 }
             },
+            .pointer => |pi| {
+                switch (pi.child) {
+                    u8 => {
+                        switch (token.kind) {
+                            .string, .string_multiline => {
+                                return self.arena.allocator().dupe(u8, token.content);
+                            },
+                            else => return error.InvalidValueType,
+                        }
+                    },
+                    else => unreachable,
+                }
+            },
 
             else => {},
         }

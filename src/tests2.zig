@@ -11,6 +11,10 @@ const MainStruct = struct {
     f1: f32,
     b1: bool,
     b2: bool,
+    s1: []const u8,
+    s2: []const u8,
+    s3: []const u8,
+    s4: []const u8,
 };
 test "full" {
     var reader = std.Io.Reader.fixed(
@@ -19,6 +23,13 @@ test "full" {
         \\ i1 = 345
         \\ i2 = 0x468
         \\    f1 = 0.12345
+        \\  s1 = "abc"
+        \\  s2 = 'abc'
+        \\  s3 = """
+        \\  line1
+        \\ line2"""
+        \\ s4 = '''
+        \\ line1'''
     );
     const result = try parse(MainStruct, &reader, std.testing.allocator);
     defer result.deinit();
@@ -28,4 +39,8 @@ test "full" {
     try expectEqual(0.12345, result.value.f1);
     try expect(result.value.b1);
     try expect(!result.value.b2);
+    try expectEqualStrings("abc", result.value.s1);
+    try expectEqualStrings("abc", result.value.s2);
+    try expectEqualStrings("  line1\n line2", result.value.s3);
+    try expectEqualStrings(" line1", result.value.s4);
 }
