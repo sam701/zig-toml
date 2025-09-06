@@ -5,7 +5,7 @@ pub fn build(b: *std.Build) void {
     const targetOpt = b.standardTargetOptions(.{});
 
     const module = b.addModule("toml", .{
-        .root_source_file = b.path("src/root.zig"),
+        .root_source_file = b.path("src/root2.zig"),
         .target = targetOpt,
         .optimize = optimizeOpt,
     });
@@ -19,30 +19,30 @@ pub fn build(b: *std.Build) void {
     test_step.dependOn(&run_tests.step);
 
     // examples
-    {
-        const example_mod = b.addModule("example1", .{
-            .root_source_file = b.path("examples/example1.zig"),
-            .target = targetOpt,
-            .optimize = optimizeOpt,
-        });
+    // {
+    //     const example_mod = b.addModule("example1", .{
+    //         .root_source_file = b.path("examples/example1.zig"),
+    //         .target = targetOpt,
+    //         .optimize = optimizeOpt,
+    //     });
 
-        const example1 = b.addExecutable(.{
-            .name = "example1",
-            .root_module = example_mod,
-        });
-        example1.root_module.addImport("toml", module);
-        b.installArtifact(example1);
+    //     const example1 = b.addExecutable(.{
+    //         .name = "example1",
+    //         .root_module = example_mod,
+    //     });
+    //     example1.root_module.addImport("toml", module);
+    //     b.installArtifact(example1);
 
-        const run_example1 = b.addRunArtifact(example1);
-        if (b.args) |args| {
-            run_example1.addArgs(args);
-        }
+    //     const run_example1 = b.addRunArtifact(example1);
+    //     if (b.args) |args| {
+    //         run_example1.addArgs(args);
+    //     }
 
-        const build_examples = b.step("examples", "Build and run examples");
-        build_examples.dependOn(&run_example1.step);
+    //     const build_examples = b.step("examples", "Build and run examples");
+    //     build_examples.dependOn(&run_example1.step);
 
-        b.default_step.dependOn(build_examples);
-    }
+    //     b.default_step.dependOn(build_examples);
+    // }
 
     // Docs
     {

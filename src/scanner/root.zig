@@ -151,7 +151,7 @@ pub const Scanner = struct {
         }
         return Token{
             .kind = if (token_kind) |t| t else .end_of_document,
-            .content = self.content_buffer.getWritten(),
+            .content = self.content_buffer.written(),
             .location = pos,
         };
     }
