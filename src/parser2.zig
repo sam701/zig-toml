@@ -93,6 +93,13 @@ const Parser = struct {
                 if (token.kind != .number) return error.InvalidValueType;
                 return std.fmt.parseFloat(T, token.content);
             },
+            .bool => {
+                switch (token.kind) {
+                    .true => return true,
+                    .false => return false,
+                    else => return error.InvalidValueType,
+                }
+            },
 
             else => {},
         }
