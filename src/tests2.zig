@@ -15,6 +15,7 @@ const MainStruct = struct {
     s2: []const u8,
     s3: []const u8,
     s4: []const u8,
+    a1: [1]u8,
 };
 test "full" {
     var reader = std.Io.Reader.fixed(
@@ -30,6 +31,7 @@ test "full" {
         \\ line2"""
         \\ s4 = '''
         \\ line1'''
+        \\ a1 = "abc"
     );
     const result = try parse(MainStruct, &reader, std.testing.allocator);
     defer result.deinit();
@@ -43,4 +45,5 @@ test "full" {
     try expectEqualStrings("abc", result.value.s2);
     try expectEqualStrings("  line1\n line2", result.value.s3);
     try expectEqualStrings(" line1", result.value.s4);
+    try expectEqualStrings("abc", result.value.a1);
 }
