@@ -2,6 +2,7 @@ const std = @import("std");
 const expect = std.testing.expect;
 const expectEqual = std.testing.expectEqual;
 const expectEqualStrings = std.testing.expectEqualStrings;
+const expectEqualSlices = std.testing.expectEqualSlices;
 
 const parse = @import("./parser2.zig").parse;
 
@@ -16,6 +17,9 @@ const MainStruct = struct {
     s3: []const u8,
     s4: []const u8,
     a1: [3]u8,
+    a5: []const i32,
+    a6: []const i32,
+    // an1: []const []const i32,
 };
 test "full" {
     var reader = std.Io.Reader.fixed(
@@ -32,6 +36,10 @@ test "full" {
         \\ s4 = '''
         \\ line1'''
         \\ a1 = "abc"
+        \\ a5 = [1,2]
+        \\ a6 = [1,
+        \\ 2,]
+        // \\ an1 = [,2,]
     );
     const result = try parse(MainStruct, &reader, std.testing.allocator);
     defer result.deinit();
@@ -46,4 +54,6 @@ test "full" {
     try expectEqualStrings("  line1\n line2", result.value.s3);
     try expectEqualStrings(" line1", result.value.s4);
     try expectEqualStrings("abc", &result.value.a1);
+    try expectEqualSlices(i32, &.{ 1, 2 }, result.value.a5);
+    try expectEqualSlices(i32, &.{ 1, 2 }, result.value.a6);
 }

@@ -81,7 +81,9 @@ pub const Scanner = struct {
             if (expect_value) {
                 switch (c) {
                     '[' => token_kind = .left_bracket,
+                    ']' => token_kind = .right_bracket, // empty array
                     '{' => token_kind = .left_brace,
+                    '}' => token_kind = .right_brace, // empty inner table
                     '0'...'9', '.', '-', '+', 'i' => {
                         self.source.prev();
                         token_kind = try value.scan(&self.source, &self.content_buffer.writer);
@@ -107,6 +109,7 @@ pub const Scanner = struct {
                             else => return error.UnexpectedChar,
                         }
                     },
+                    '\n' => token_kind = .line_break,
                     else => return error.UnexpectedChar,
                 }
             } else {

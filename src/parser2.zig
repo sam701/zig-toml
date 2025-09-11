@@ -28,6 +28,8 @@ const Parser = struct {
     arena: *ArenaAllocator,
     scanner: Scanner,
     token_location: ?SourceLocation = null,
+    current_token: ?Token = null,
+    advance: bool = true,
     // struct_init_map: StructTree,
 
     pub fn init(reader: *Reader, alloc: Allocator) error{OutOfMemory}!Parser {
@@ -45,9 +47,21 @@ const Parser = struct {
     }
 
     fn nextToken(self: *Parser, expect_value: bool) Error!Token {
+        if (!self.advance) {
+            if (self.current_token) |ct| {
+                self.advance = true;
+                std.debug.print("token={any} (no advance)\n", .{ct.kind});
+                return ct;
+            }
+        }
         const t = try self.scanner.nextRaw(expect_value);
+        self.current_token = t;
         self.token_location = t.location;
+        std.debug.print("token={any}\n", .{t.kind});
         return t;
+    }
+    fn pushBack(self: *Parser) void {
+        self.advance = false;
     }
 
     fn parseStruct(self: *Parser, comptime T: type) Error!T {
@@ -110,7 +124,10 @@ const Parser = struct {
                             else => return error.InvalidValueType,
                         }
                     },
-                    else => unreachable,
+                    else => {
+                        if (token.kind != .left_bracket) return error.UnexpectedToken;
+                        return self.parseArrayValue(pi.child);
+                    },
                 }
             },
             .array => |ti2| {
@@ -134,6 +151,36 @@ const Parser = struct {
         }
 
         unreachable;
+    }
+
+    fn parseArrayValue(self: *Parser, comptime T: type) Error![]T {
+        var ar = std.ArrayList(T).empty;
+        while (true) {
+            try self.skipLineBreaks(true);
+            var token = try self.nextToken(true);
+            if (token.kind == .right_bracket) break;
+            self.pushBack();
+
+            try ar.append(self.arena.allocator(), try self.parseValue(T));
+            try self.skipLineBreaks(false);
+            token = try self.nextToken(false);
+            switch (token.kind) {
+                .comma => {},
+                .right_bracket => break,
+                else => return error.UnexpectedToken,
+            }
+        }
+        return ar.toOwnedSlice(self.arena.allocator());
+    }
+
+    fn skipLineBreaks(self: *Parser, expect_value: bool) Error!void {
+        while (true) {
+            const t = try self.nextToken(expect_value);
+            if (t.kind != .line_break) {
+                self.pushBack();
+                break;
+            }
+        }
     }
 
     // fn parseKeyField(self: *Parser, comptime T: type, dest: *T, field_name: []const u8, init_map: *StructTree) Error!void {
