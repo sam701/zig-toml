@@ -113,6 +113,22 @@ const Parser = struct {
                     else => unreachable,
                 }
             },
+            .array => |ti2| {
+                switch (ti2.child) {
+                    u8 => {
+                        switch (token.kind) {
+                            .string, .string_multiline => {
+                                var r: T = undefined;
+                                if (r.len != token.content.len) return error.InvalidValueType;
+                                @memcpy(&r, token.content);
+                                return r;
+                            },
+                            else => return error.InvalidValueType,
+                        }
+                    },
+                    else => unreachable,
+                }
+            },
 
             else => {},
         }
