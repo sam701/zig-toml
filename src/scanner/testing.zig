@@ -10,19 +10,13 @@ pub const ExpectedToken = struct {
     location: ?SourceLocation = null,
 };
 
-pub fn testInput(input: []const u8, expected_tokens: []const ExpectedToken) !void {
-    return testInputRaw(input, expected_tokens, false);
-}
-pub fn testValueInput(input: []const u8, expected_tokens: []const ExpectedToken) !void {
-    return testInputRaw(input, expected_tokens, true);
-}
-fn testInputRaw(input: []const u8, expected_tokens: []const ExpectedToken, expect_value: bool) !void {
+pub fn testInput(input: []const u8, expected_tokens: []const ExpectedToken, hint: ?Scanner.Hint) !void {
     var in = std.Io.Reader.fixed(input);
     var s = try Scanner.init(&in, std.testing.allocator);
     defer s.deinit();
 
     for (expected_tokens) |expected| {
-        const lt = try s.nextRaw(expect_value);
+        const lt = try s.next(hint);
         try std.testing.expectEqual(expected.kind, lt.kind);
         if (expected.content) |ec|
             try std.testing.expectEqualStrings(ec, lt.content);

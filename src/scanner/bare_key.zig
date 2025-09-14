@@ -26,11 +26,11 @@ test "bare_key" {
         .{ .kind = .bare_key, .content = "abc34" },
         .{ .kind = .dot },
         .{ .kind = .end_of_document },
-    });
+    }, null);
     try testInput("123.", &.{
         .{ .kind = .bare_key, .content = "123" },
         .{ .kind = .dot },
         .{ .kind = .end_of_document },
-    });
-    try testInput("3-e_5.", &.{.{ .kind = .bare_key, .content = "3-e_5" }});
+    }, null);
+    try testInput("3-e_5.", &.{.{ .kind = .bare_key, .content = "3-e_5" }}, null);
 }

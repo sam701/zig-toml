@@ -48,6 +48,12 @@ pub const Token = struct {
 pub const Scanner = struct {
     const Self = @This();
 
+    pub const Hint = enum {
+        top_level,
+        after_double_bracket,
+        expect_value,
+    };
+
     content_buffer: Writer.Allocating,
     source: Source,
 
@@ -64,92 +70,87 @@ pub const Scanner = struct {
         self.content_buffer.deinit();
     }
 
-    pub fn nextValue(self: *Self) Error!Token {
-        return self.nextRaw(true);
-    }
-    pub fn next(self: *Self) Error!Token {
-        return self.nextRaw(false);
-    }
-    pub fn nextRaw(self: *Self, expect_value: bool) Error!Token {
+    pub fn next(self: *Self, hint: ?Hint) Error!Token {
         try self.skipSpaces();
 
         const pos = self.source.location;
         var token_kind: ?TokenKind = null;
         self.content_buffer.clearRetainingCapacity();
         if (try self.source.next()) |c| {
-            // std.debug.print("scan peeking, c={c}\n", .{c});
-            if (expect_value) {
-                switch (c) {
-                    '[' => token_kind = .left_bracket,
-                    ']' => token_kind = .right_bracket, // empty array
-                    '{' => token_kind = .left_brace,
-                    '}' => token_kind = .right_brace, // empty inner table
-                    '0'...'9', '.', '-', '+', 'i' => {
-                        self.source.prev();
-                        token_kind = try value.scan(&self.source, &self.content_buffer.writer);
-                    },
-                    '"', '\'' => {
-                        self.source.prev();
-                        token_kind = try string.scan(&self.source, &self.content_buffer.writer);
-                    },
-                    't' => {
-                        token_kind = try value.ensure(&self.source, "rue", .true);
-                    },
-                    'f' => {
-                        token_kind = try value.ensure(&self.source, "alse", .false);
-                    },
-                    'n' => {
-                        const c2 = try self.source.mustNext();
-                        switch (c2) {
-                            'u' => token_kind = try value.ensure(&self.source, "ll", .null),
-                            'a' => {
-                                token_kind = try value.ensure(&self.source, "n", .number);
-                                try self.content_buffer.writer.writeAll("nan");
-                            },
-                            else => return error.UnexpectedChar,
-                        }
-                    },
-                    '\n' => token_kind = .line_break,
-                    else => return error.UnexpectedChar,
-                }
-            } else {
-                switch (c) {
-                    '\n' => token_kind = .line_break,
-                    '.' => token_kind = .dot,
-                    ',' => token_kind = .comma,
-                    '=' => token_kind = .equal,
-                    '}' => token_kind = .right_brace,
-                    '[' => {
+            // std.debug.print("scan, c={c} {any}\n", .{ c, hint });
+
+            switch (c) {
+                '\n' => token_kind = .line_break,
+                ',' => token_kind = .comma,
+                '=' => token_kind = .equal,
+                '{' => token_kind = .left_brace,
+                '}' => token_kind = .right_brace, // empty inner table
+                '[' => {
+                    if (hint == .top_level) {
                         if (try self.source.mustNext() == '[') {
                             token_kind = .double_left_bracket;
                         } else {
                             self.source.prev();
                             token_kind = .left_bracket;
                         }
-                    },
-                    ']' => {
+                    } else {
+                        token_kind = .left_bracket;
+                    }
+                },
+                ']' => {
+                    if (hint == .after_double_bracket) {
                         if (try self.source.mustNext() == ']') {
                             token_kind = .double_right_bracket;
                         } else {
                             self.source.prev();
                             token_kind = .right_bracket;
                         }
-                    },
-                    '#' => {
-                        try self.skipUntilNewLine();
-                        return self.next();
-                    },
-                    '"', '\'' => {
-                        self.source.prev();
-                        token_kind = try string.scan(&self.source, &self.content_buffer.writer);
-                    },
-                    'a'...'z', 'A'...'Z', '0'...'9', '_', '-' => {
-                        self.source.prev();
-                        token_kind = try bare_key.scan(&self.source, &self.content_buffer.writer);
-                    },
+                    } else {
+                        token_kind = .right_bracket;
+                    }
+                },
+                '"', '\'' => {
+                    self.source.prev();
+                    token_kind = try string.scan(&self.source, &self.content_buffer.writer);
+                },
+                '#' => {
+                    try self.skipUntilNewLine();
+                    return self.next(null);
+                },
 
-                    else => return error.UnexpectedChar,
-                }
+                else => {
+                    if (hint == .expect_value) {
+                        switch (c) {
+                            '0'...'9', '.', '-', '+', 'i' => {
+                                self.source.prev();
+                                token_kind = try value.scan(&self.source, &self.content_buffer.writer);
+                            },
+                            't' => token_kind = try value.ensure(&self.source, "rue", .true),
+                            'f' => token_kind = try value.ensure(&self.source, "alse", .false),
+                            'n' => {
+                                const c2 = try self.source.mustNext();
+                                switch (c2) {
+                                    'u' => token_kind = try value.ensure(&self.source, "ll", .null),
+                                    'a' => {
+                                        token_kind = try value.ensure(&self.source, "n", .number);
+                                        try self.content_buffer.writer.writeAll("nan");
+                                    },
+                                    else => return error.UnexpectedChar,
+                                }
+                            },
+                            else => return error.UnexpectedChar,
+                        }
+                    } else {
+                        switch (c) {
+                            'a'...'z', 'A'...'Z', '0'...'9', '_', '-' => {
+                                self.source.prev();
+                                token_kind = try bare_key.scan(&self.source, &self.content_buffer.writer);
+                            },
+                            '.' => token_kind = .dot,
+                            else => return error.UnexpectedChar,
+                        }
+                    }
+                },
             }
         }
         return Token{
@@ -188,21 +189,25 @@ comptime {
 }
 
 test "comments" {
-    try testInput(", # comment\n abc", &.{ .{ .kind = .comma }, .{ .kind = .line_break } });
+    try testInput(", # comment\n abc", &.{ .{ .kind = .comma }, .{ .kind = .line_break } }, null);
 }
 
 test "basic tokens" {
-    try testInput(", ] [[ ]] \n = }", &.{
+    try testInput(", ] \n = }", &.{
         .{ .kind = .comma },
         .{ .kind = .right_bracket },
-        .{ .kind = .double_left_bracket },
-        .{ .kind = .double_right_bracket },
         .{ .kind = .line_break },
         .{ .kind = .equal },
         .{ .kind = .right_brace },
-    });
-    try testValueInput("[ {", &.{
+    }, null);
+    try testInput(" [[", &.{
+        .{ .kind = .double_left_bracket },
+    }, .top_level);
+    try testInput(" ]]", &.{
+        .{ .kind = .double_right_bracket },
+    }, .after_double_bracket);
+    try testInput("[ {", &.{
         .{ .kind = .left_bracket },
         .{ .kind = .left_brace },
-    });
+    }, null);
 }

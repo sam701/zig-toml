@@ -19,7 +19,7 @@ const MainStruct = struct {
     a1: [3]u8,
     a5: []const i32,
     a6: []const i32,
-    // an1: []const []const i32,
+    an1: []const []const i32,
 };
 test "full" {
     var reader = std.Io.Reader.fixed(
@@ -37,9 +37,9 @@ test "full" {
         \\ line1'''
         \\ a1 = "abc"
         \\ a5 = [1,2]
-        \\ a6 = [1,
+        \\ a6 = [1, # comment
         \\ 2,]
-        // \\ an1 = [,2,]
+        \\ an1 = [[1,2,],[3, 4]]
     );
     const result = try parse(MainStruct, &reader, std.testing.allocator);
     defer result.deinit();
@@ -55,5 +55,8 @@ test "full" {
     try expectEqualStrings(" line1", result.value.s4);
     try expectEqualStrings("abc", &result.value.a1);
     try expectEqualSlices(i32, &.{ 1, 2 }, result.value.a5);
-    try expectEqualSlices(i32, &.{ 1, 2 }, result.value.a6);
+
+    try expectEqual(2, result.value.an1.len);
+    try expectEqualSlices(i32, &.{ 1, 2 }, result.value.an1[0]);
+    try expectEqualSlices(i32, &.{ 3, 4 }, result.value.an1[1]);
 }

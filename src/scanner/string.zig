@@ -167,55 +167,55 @@ test parseOpeningDelimiter {
 test scan {
     try testInput(
         \\"hello"
-    , &.{.{ .kind = .string, .content = "hello" }});
+    , &.{.{ .kind = .string, .content = "hello" }}, null);
     try testInput(
         \\'hello'
-    , &.{.{ .kind = .string, .content = "hello" }});
+    , &.{.{ .kind = .string, .content = "hello" }}, null);
     try testInput(
         \\"""
         \\  hello
         \\"""
-    , &.{.{ .kind = .string_multiline, .content = "  hello\n" }});
+    , &.{.{ .kind = .string_multiline, .content = "  hello\n" }}, null);
     try testInput(
         \\'''
         \\  hello
         \\'''
-    , &.{.{ .kind = .string_multiline, .content = "  hello\n" }});
+    , &.{.{ .kind = .string_multiline, .content = "  hello\n" }}, null);
     try testInput(
         \\""
-    , &.{.{ .kind = .string, .content = "" }});
+    , &.{.{ .kind = .string, .content = "" }}, null);
     try testInput(
         \\"""a""b"""
-    , &.{.{ .kind = .string_multiline, .content = "a\"\"b" }});
-    try testInput("\"\\b\\t\\r\\n\\fa\"", &.{.{ .kind = .string, .content = "\x08\t\r\n\x0ca" }});
+    , &.{.{ .kind = .string_multiline, .content = "a\"\"b" }}, null);
+    try testInput("\"\\b\\t\\r\\n\\fa\"", &.{.{ .kind = .string, .content = "\x08\t\r\n\x0ca" }}, null);
     try testInput(
         \\"a\"b"
-    , &.{.{ .kind = .string, .content = "a\"b" }});
+    , &.{.{ .kind = .string, .content = "a\"b" }}, null);
     try testInput(
         \\"""ab\
         \\
         \\  cde"""
-    , &.{.{ .kind = .string_multiline, .content = "abcde" }});
+    , &.{.{ .kind = .string_multiline, .content = "abcde" }}, null);
     try testInput(
         \\'''ab\
         \\
         \\  cde'''
-    , &.{.{ .kind = .string_multiline, .content = "ab\\\n\n  cde" }});
+    , &.{.{ .kind = .string_multiline, .content = "ab\\\n\n  cde" }}, null);
     try testInput(
         \\"""
         \\  abc"""
-    , &.{.{ .kind = .string_multiline, .content = "  abc" }});
+    , &.{.{ .kind = .string_multiline, .content = "  abc" }}, null);
     try testInput(
         \\'''
         \\  abc'''
-    , &.{.{ .kind = .string_multiline, .content = "  abc" }});
+    , &.{.{ .kind = .string_multiline, .content = "  abc" }}, null);
     try testInput(
         \\'a\"b'
-    , &.{.{ .kind = .string, .content = "a\\\"b" }});
+    , &.{.{ .kind = .string, .content = "a\\\"b" }}, null);
     try testInput(
         \\"b\u00E4c"
-    , &.{.{ .kind = .string, .content = "bäc" }});
+    , &.{.{ .kind = .string, .content = "bäc" }}, null);
     try testInput(
         \\"b\U0001f642c"
-    , &.{.{ .kind = .string, .content = "b\u{1f642}c" }});
+    , &.{.{ .kind = .string, .content = "b\u{1f642}c" }}, null);
 }

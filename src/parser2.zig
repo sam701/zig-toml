@@ -46,18 +46,18 @@ const Parser = struct {
         self.scanner.deinit();
     }
 
-    fn nextToken(self: *Parser, expect_value: bool) Error!Token {
+    fn nextToken(self: *Parser, hint: ?Scanner.Hint) Error!Token {
         if (!self.advance) {
             if (self.current_token) |ct| {
                 self.advance = true;
-                std.debug.print("token={any} (no advance)\n", .{ct.kind});
+                std.debug.print("token={any} (no advance) {s}\n", .{ ct.kind, ct.content });
                 return ct;
             }
         }
-        const t = try self.scanner.nextRaw(expect_value);
+        const t = try self.scanner.next(hint);
         self.current_token = t;
         self.token_location = t.location;
-        std.debug.print("token={any}\n", .{t.kind});
+        std.debug.print("token={any} {s}\n", .{ t.kind, t.content });
         return t;
     }
     fn pushBack(self: *Parser) void {
@@ -71,7 +71,7 @@ const Parser = struct {
         var result: T = undefined;
 
         while (true) {
-            const token = try self.nextToken(false);
+            const token = try self.nextToken(.top_level);
 
             switch (token.kind) {
                 .bare_key, .string => {
@@ -96,7 +96,7 @@ const Parser = struct {
     fn parseValue(self: *Parser, comptime T: type) Error!T {
         const ti = @typeInfo(T);
 
-        const token = try self.nextToken(true);
+        const token = try self.nextToken(.expect_value);
         // std.debug.print("kind = {}, context = {s} loc = {any}\n", .{ token.kind, token.content, token.location });
         switch (ti) {
             .int => {
@@ -156,14 +156,14 @@ const Parser = struct {
     fn parseArrayValue(self: *Parser, comptime T: type) Error![]T {
         var ar = std.ArrayList(T).empty;
         while (true) {
-            try self.skipLineBreaks(true);
-            var token = try self.nextToken(true);
+            try self.skipLineBreaks(.expect_value);
+            var token = try self.nextToken(.expect_value);
             if (token.kind == .right_bracket) break;
             self.pushBack();
 
             try ar.append(self.arena.allocator(), try self.parseValue(T));
-            try self.skipLineBreaks(false);
-            token = try self.nextToken(false);
+            try self.skipLineBreaks(null);
+            token = try self.nextToken(null);
             switch (token.kind) {
                 .comma => {},
                 .right_bracket => break,
@@ -173,9 +173,9 @@ const Parser = struct {
         return ar.toOwnedSlice(self.arena.allocator());
     }
 
-    fn skipLineBreaks(self: *Parser, expect_value: bool) Error!void {
+    fn skipLineBreaks(self: *Parser, hint: ?Scanner.Hint) Error!void {
         while (true) {
-            const t = try self.nextToken(expect_value);
+            const t = try self.nextToken(hint);
             if (t.kind != .line_break) {
                 self.pushBack();
                 break;
@@ -216,7 +216,7 @@ const Parser = struct {
     fn parseAfterBareKey(self: *Parser, comptime T: type) Error!T {
         // const ti = @typeInfo(T);
         // if (ti == .@"struct") {
-        const token = try self.nextToken(false);
+        const token = try self.nextToken(null);
         switch (token.kind) {
             .dot => {},
             .equal => return self.parseValue(T),
