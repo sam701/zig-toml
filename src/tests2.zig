@@ -20,7 +20,14 @@ const MainStruct = struct {
     a5: []const i32,
     a6: []const i32,
     an1: []const []const i32,
+    st1: Struct1,
+    st2: *Struct1,
 };
+const Struct1 = struct {
+    i1: i32,
+    b1: bool,
+};
+
 test "full" {
     var reader = std.Io.Reader.fixed(
         \\    b1 = true
@@ -40,6 +47,8 @@ test "full" {
         \\ a6 = [1, # comment
         \\ 2,]
         \\ an1 = [[1,2,],[3, 4]]
+        \\ st1 = { i1 = 3, b1 = true }
+        \\ st2 = { i1 = 3, b1 = true }
     );
     const result = try parse(MainStruct, &reader, std.testing.allocator);
     defer result.deinit();
@@ -59,4 +68,7 @@ test "full" {
     try expectEqual(2, result.value.an1.len);
     try expectEqualSlices(i32, &.{ 1, 2 }, result.value.an1[0]);
     try expectEqualSlices(i32, &.{ 3, 4 }, result.value.an1[1]);
+
+    try expectEqual(Struct1{ .i1 = 3, .b1 = true }, result.value.st1);
+    try expectEqual(Struct1{ .i1 = 3, .b1 = true }, result.value.st2.*);
 }

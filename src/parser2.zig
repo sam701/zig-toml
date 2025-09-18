@@ -18,7 +18,7 @@ pub fn parse(comptime T: type, reader: *Reader, alloc: Allocator) Error!Parsed(T
     defer p.deinit();
     return Parsed(T){
         .arena = p.arena,
-        .value = try p.parseStruct(T),
+        .value = try p.parseTopLevelStruct(T),
     };
 }
 
@@ -64,7 +64,7 @@ const Parser = struct {
         self.advance = false;
     }
 
-    fn parseStruct(self: *Parser, comptime T: type) Error!T {
+    fn parseTopLevelStruct(self: *Parser, comptime T: type) Error!T {
         const ti = @typeInfo(T);
         if (ti != .@"struct") return error.NotStruct;
 
@@ -115,6 +115,12 @@ const Parser = struct {
                 }
             },
             .pointer => |pi| {
+                if (pi.size == .one) {
+                    self.pushBack();
+                    const result = try self.arena.allocator().create(pi.child);
+                    result.* = try self.parseInnerTable(pi.child);
+                    return result;
+                }
                 switch (pi.child) {
                     u8 => {
                         switch (token.kind) {
@@ -146,11 +152,49 @@ const Parser = struct {
                     else => unreachable,
                 }
             },
+            .@"struct" => {
+                self.pushBack();
+                return self.parseInnerTable(T);
+            },
 
             else => {},
         }
 
         unreachable;
+    }
+
+    fn parseInnerTable(self: *Parser, comptime T: type) Error!T {
+        const ti = @typeInfo(T);
+        if (ti != .@"struct") return error.NotStruct;
+
+        var result: T = undefined;
+
+        var token = try self.nextToken(null);
+        if (token.kind != .left_brace) return error.UnexpectedToken;
+
+        while (true) {
+            token = try self.nextToken(null);
+            switch (token.kind) {
+                .bare_key, .string => {
+                    inline for (ti.@"struct".fields) |field| {
+                        if (std.mem.eql(u8, field.name, token.content)) {
+                            @field(result, field.name) = try self.parseAfterBareKey(field.type);
+                            break;
+                        }
+                    }
+                },
+                else => return error.UnexpectedToken,
+            }
+
+            token = try self.nextToken(null);
+            switch (token.kind) {
+                .comma => {},
+                .right_brace => break,
+                else => return error.UnexpectedToken,
+            }
+        }
+
+        return result;
     }
 
     fn parseArrayValue(self: *Parser, comptime T: type) Error![]T {
@@ -218,7 +262,7 @@ const Parser = struct {
         // if (ti == .@"struct") {
         const token = try self.nextToken(null);
         switch (token.kind) {
-            .dot => {},
+            .dot => unreachable,
             .equal => return self.parseValue(T),
             else => return error.UnexpectedToken,
         }
