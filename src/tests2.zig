@@ -24,6 +24,8 @@ const MainStruct = struct {
     st2: *Struct1,
     st3: Struct1,
     st4: Struct2,
+    st5: Struct2,
+    st6: Struct2,
 };
 const Struct1 = struct {
     i1: i32,
@@ -59,6 +61,13 @@ test "full" {
         \\
         \\ st3."b1" = true
         \\ st4 = { st1.i1 = 3, st1.b1 = true}
+        \\ [st5]
+        \\ st1.i1 = 3
+        \\ st1.b1 = true
+        \\
+        \\ [st6.st1]
+        \\ i1 = 4
+        \\ b1 = false
     );
     const result = try parse(MainStruct, &reader, std.testing.allocator);
     defer result.deinit();
@@ -83,4 +92,6 @@ test "full" {
     try expectEqual(Struct1{ .i1 = 3, .b1 = true }, result.value.st2.*);
     try expectEqual(Struct1{ .i1 = 3, .b1 = true }, result.value.st3);
     try expectEqual(Struct1{ .i1 = 3, .b1 = true }, result.value.st4.st1);
+    try expectEqual(Struct1{ .i1 = 3, .b1 = true }, result.value.st5.st1);
+    try expectEqual(Struct1{ .i1 = 4, .b1 = false }, result.value.st6.st1);
 }

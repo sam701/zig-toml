@@ -1,6 +1,7 @@
 const std = @import("std");
 const Scanner = @import("./scanner/root.zig").Scanner;
 const Token = @import("./scanner/root.zig").Token;
+const TokenKind = @import("./scanner/root.zig").TokenKind;
 const Reader = std.Io.Reader;
 const Allocator = std.mem.Allocator;
 const ArenaAllocator = std.heap.ArenaAllocator;
@@ -96,10 +97,10 @@ const Parser = struct {
 
             switch (token.kind) {
                 .bare_key, .string => {
-                    try self.parseKey(T, &result, token.content);
+                    try self.parseKey(T, &result, token.content, .equal);
                 },
-                .left_bracket => {},
-                .double_left_bracket => {},
+                .left_bracket => try self.parseTableHeader(T, &result, .right_bracket),
+                .double_left_bracket => unreachable,
                 .line_break => {},
                 .end_of_document => break,
                 else => return error.UnexpectedToken,
@@ -107,6 +108,37 @@ const Parser = struct {
         }
 
         return result;
+    }
+
+    fn parseTableHeader(self: *Parser, comptime T: type, dest: *T, expected_token: TokenKind) Error!void {
+        const token = try self.nextToken(null);
+        switch (token.kind) {
+            .bare_key, .string => {
+                try self.parseKey(T, dest, token.content, expected_token);
+            },
+            else => return error.UnexpectedToken,
+        }
+    }
+
+    fn parseTableContent(self: *Parser, comptime T: type, dest: *T) Error!void {
+        const ti = @typeInfo(T);
+        if (ti != .@"struct") return error.NotStruct;
+
+        while (true) {
+            const token = try self.nextToken(.top_level);
+
+            switch (token.kind) {
+                .bare_key, .string => {
+                    try self.parseKey(T, dest, token.content, .equal);
+                },
+                .left_bracket, .double_left_bracket, .end_of_document => {
+                    self.pushBack();
+                    break;
+                },
+                .line_break => {},
+                else => return error.UnexpectedToken,
+            }
+        }
     }
 
     fn parseValue(self: *Parser, comptime T: type) Error!T {
@@ -192,7 +224,7 @@ const Parser = struct {
             token = try self.nextToken(null);
             switch (token.kind) {
                 .bare_key, .string => {
-                    try self.parseKey(T, &result, token.content);
+                    try self.parseKey(T, &result, token.content, .equal);
                 },
                 else => return error.UnexpectedToken,
             }
@@ -238,11 +270,12 @@ const Parser = struct {
         }
     }
 
-    fn parseKey(self: *Parser, comptime T: type, dest: *T, key: []const u8) Error!void {
+    fn parseKey(self: *Parser, comptime T: type, dest: *T, key: []const u8, expected_token: TokenKind) Error!void {
         const ti = @typeInfo(T);
         inline for (ti.@"struct".fields) |field| {
             if (std.mem.eql(u8, field.name, key)) {
-                try self.parseAfterKey(field.type, &@field(dest, field.name));
+                // TODO: allocate if the field is a pointer
+                try self.parseAfterKey(field.type, &@field(dest, field.name), expected_token);
                 return;
             }
         }
@@ -250,22 +283,27 @@ const Parser = struct {
         return error.UnexpectedToken;
     }
 
-    fn parseAfterKey(self: *Parser, comptime T: type, dest: *T) Error!void {
+    fn parseAfterKey(self: *Parser, comptime T: type, dest: *T, expected_token: TokenKind) Error!void {
         const token = try self.nextToken(null);
-        switch (token.kind) {
-            .dot => try self.parseAfterDot(T, dest),
-            .equal => dest.* = try self.parseValue(T),
-            else => return error.UnexpectedToken,
+        if (token.kind == .dot) {
+            try self.parseAfterDot(T, dest, expected_token);
+        } else {
+            if (token.kind != expected_token) return error.UnexpectedToken;
+            if (token.kind == .equal) {
+                dest.* = try self.parseValue(T);
+            } else {
+                try self.parseTableContent(T, dest);
+            }
         }
     }
 
-    fn parseAfterDot(self: *Parser, comptime T: type, dest: *T) Error!void {
+    fn parseAfterDot(self: *Parser, comptime T: type, dest: *T, expected_token: TokenKind) Error!void {
         const token = try self.nextToken(null);
         if (token.kind != .bare_key and token.kind != .string) return error.UnexpectedToken;
 
         const ti = @typeInfo(T);
         if (ti != .@"struct") return error.UnexpectedToken;
 
-        try self.parseKey(T, dest, token.content);
+        try self.parseKey(T, dest, token.content, expected_token);
     }
 };
