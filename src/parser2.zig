@@ -22,7 +22,27 @@ pub fn parse(comptime T: type, reader: *Reader, alloc: Allocator) Error!Parsed(T
     };
 }
 
-// const StructTree = std.StringHashMap(*StructTree);
+const StructInfo = struct {
+    initialized: bool = false,
+    child_map: ?std.StringHashMap(StructInfo) = null,
+
+    fn deinit(self: *StructInfo) void {
+        if (self.child_map) |*m| {
+            var it = m.valueIterator();
+            while (it.next()) |v| {
+                v.deinit();
+            }
+            m.deinit();
+        }
+    }
+
+    fn addChild(self: *StructInfo, name: []const u8, child: StructInfo) error{OutOfMemory}!void {
+        if (self.child_map == null) {
+            self.child_map = .{};
+        }
+        try self.child_map.?.put(name, child);
+    }
+};
 
 const Parser = struct {
     arena: *ArenaAllocator,
@@ -30,7 +50,7 @@ const Parser = struct {
     token_location: ?SourceLocation = null,
     current_token: ?Token = null,
     advance: bool = true,
-    // struct_init_map: StructTree,
+    top_level_struct: StructInfo,
 
     pub fn init(reader: *Reader, alloc: Allocator) error{OutOfMemory}!Parser {
         const arena = try alloc.create(ArenaAllocator);
@@ -38,12 +58,13 @@ const Parser = struct {
         return .{
             .arena = arena,
             .scanner = try Scanner.init(reader, alloc),
-            // .struct_init_map = StructTree.init(alloc),
+            .top_level_struct = .{},
         };
     }
 
     pub fn deinit(self: *Parser) void {
         self.scanner.deinit();
+        self.top_level_struct.deinit();
     }
 
     fn nextToken(self: *Parser, hint: ?Scanner.Hint) Error!Token {
@@ -75,12 +96,7 @@ const Parser = struct {
 
             switch (token.kind) {
                 .bare_key, .string => {
-                    inline for (ti.@"struct".fields) |field| {
-                        if (std.mem.eql(u8, field.name, token.content)) {
-                            @field(result, field.name) = try self.parseAfterBareKey(field.type);
-                            break;
-                        }
-                    }
+                    try self.parseKey(T, &result, token.content);
                 },
                 .left_bracket => {},
                 .double_left_bracket => {},
@@ -176,12 +192,7 @@ const Parser = struct {
             token = try self.nextToken(null);
             switch (token.kind) {
                 .bare_key, .string => {
-                    inline for (ti.@"struct".fields) |field| {
-                        if (std.mem.eql(u8, field.name, token.content)) {
-                            @field(result, field.name) = try self.parseAfterBareKey(field.type);
-                            break;
-                        }
-                    }
+                    try self.parseKey(T, &result, token.content);
                 },
                 else => return error.UnexpectedToken,
             }
@@ -227,57 +238,34 @@ const Parser = struct {
         }
     }
 
-    // fn parseKeyField(self: *Parser, comptime T: type, dest: *T, field_name: []const u8, init_map: *StructTree) Error!void {
-    //     const ti = @typeInfo(T);
-    //     if (ti != .@"struct") return error.NotStruct;
-
-    //     inline for (ti.@"struct".fields) |field| {
-    //         if (std.mem.eql(u8, field.name, field_name)) {
-
-    //             // ===
-
-    //             // ===
-    //             var token = try self.nextToken(false);
-    //             switch (token.kind) {
-    //                 .dot => {
-    //                     token = try self.nextToken(false);
-    //                     switch (token.kind) {
-    //                         .bare_key, .string => {},
-    //                         else => return error.UnexpectedToken,
-    //                     }
-    //                 },
-    //                 .equal => return self.parseInnerTable(T),
-    //                 else => return error.UnexpectedToken,
-    //             }
-
-    //             // @field(result, field.name) = try self.parseAfterBareKey(field.type);
-    //             return;
-    //         }
-    //     }
-    //     // TODO handle unmatched field
-    // }
-
-    fn parseAfterBareKey(self: *Parser, comptime T: type) Error!T {
-        // const ti = @typeInfo(T);
-        // if (ti == .@"struct") {
-        const token = try self.nextToken(null);
-        switch (token.kind) {
-            .dot => unreachable,
-            .equal => return self.parseValue(T),
-            else => return error.UnexpectedToken,
+    fn parseKey(self: *Parser, comptime T: type, dest: *T, key: []const u8) Error!void {
+        const ti = @typeInfo(T);
+        inline for (ti.@"struct".fields) |field| {
+            if (std.mem.eql(u8, field.name, key)) {
+                try self.parseAfterKey(field.type, &@field(dest, field.name));
+                return;
+            }
         }
-        // }
-        unreachable;
+
+        return error.UnexpectedToken;
     }
 
-    // fn parseInnerTable(self: *Parser, comptime T: type) Error!T {
-    //     var token = try self.scanner.next();
-    //     if (token.kind != .left_brace) return error.UnexpectedToken;
+    fn parseAfterKey(self: *Parser, comptime T: type, dest: *T) Error!void {
+        const token = try self.nextToken(null);
+        switch (token.kind) {
+            .dot => try self.parseAfterDot(T, dest),
+            .equal => dest.* = try self.parseValue(T),
+            else => return error.UnexpectedToken,
+        }
+    }
 
-    //     token = try self.nextToken(false);
-    //     switch (token.kind) {
-    //         .bare_key, .string => {},
-    //         else => return error.UnexpectedToken,
-    //     }
-    // }
+    fn parseAfterDot(self: *Parser, comptime T: type, dest: *T) Error!void {
+        const token = try self.nextToken(null);
+        if (token.kind != .bare_key and token.kind != .string) return error.UnexpectedToken;
+
+        const ti = @typeInfo(T);
+        if (ti != .@"struct") return error.UnexpectedToken;
+
+        try self.parseKey(T, dest, token.content);
+    }
 };

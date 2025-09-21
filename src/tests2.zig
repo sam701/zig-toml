@@ -22,10 +22,16 @@ const MainStruct = struct {
     an1: []const []const i32,
     st1: Struct1,
     st2: *Struct1,
+    st3: Struct1,
+    st4: Struct2,
 };
 const Struct1 = struct {
     i1: i32,
     b1: bool,
+};
+
+const Struct2 = struct {
+    st1: Struct1,
 };
 
 test "full" {
@@ -47,8 +53,12 @@ test "full" {
         \\ a6 = [1, # comment
         \\ 2,]
         \\ an1 = [[1,2,],[3, 4]]
+        \\ st3.i1 = 3
         \\ st1 = { i1 = 3, b1 = true }
-        \\ st2 = { i1 = 3, b1 = true }
+        \\ 'st2' = { i1 = 3, b1 = true }
+        \\
+        \\ st3."b1" = true
+        \\ st4 = { st1.i1 = 3, st1.b1 = true}
     );
     const result = try parse(MainStruct, &reader, std.testing.allocator);
     defer result.deinit();
@@ -71,4 +81,6 @@ test "full" {
 
     try expectEqual(Struct1{ .i1 = 3, .b1 = true }, result.value.st1);
     try expectEqual(Struct1{ .i1 = 3, .b1 = true }, result.value.st2.*);
+    try expectEqual(Struct1{ .i1 = 3, .b1 = true }, result.value.st3);
+    try expectEqual(Struct1{ .i1 = 3, .b1 = true }, result.value.st4.st1);
 }
