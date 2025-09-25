@@ -26,15 +26,16 @@ const MainStruct = struct {
     st4: Struct2,
     st5: Struct2,
     st6: Struct2,
+    st7: *Struct3,
+    st8: *Struct3,
 };
 const Struct1 = struct {
     i1: i32,
     b1: bool,
 };
 
-const Struct2 = struct {
-    st1: Struct1,
-};
+const Struct2 = struct { st1: Struct1 };
+const Struct3 = struct { st1: *Struct1 };
 
 test "full" {
     var reader = std.Io.Reader.fixed(
@@ -68,6 +69,13 @@ test "full" {
         \\ [st6.st1]
         \\ i1 = 4
         \\ b1 = false
+        \\ [st7]
+        \\ st1.i1 = 3
+        \\ st1.b1 = true
+        \\
+        \\ [st8.st1]
+        \\ i1 = 4
+        \\ b1 = false
     );
     const result = try parse(MainStruct, &reader, std.testing.allocator);
     defer result.deinit();
@@ -94,4 +102,6 @@ test "full" {
     try expectEqual(Struct1{ .i1 = 3, .b1 = true }, result.value.st4.st1);
     try expectEqual(Struct1{ .i1 = 3, .b1 = true }, result.value.st5.st1);
     try expectEqual(Struct1{ .i1 = 4, .b1 = false }, result.value.st6.st1);
+    try expectEqual(Struct1{ .i1 = 3, .b1 = true }, result.value.st7.st1.*);
+    try expectEqual(Struct1{ .i1 = 4, .b1 = false }, result.value.st8.st1.*);
 }

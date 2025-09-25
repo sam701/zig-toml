@@ -93,6 +93,8 @@ const Parser = struct {
 
     fn parseTopLevelStruct(self: *Parser, comptime T: type) Error!T {
         const ti = @typeInfo(T);
+
+        // TODO: it can be a pointer to a struct.
         if (ti != .@"struct") return error.NotStruct;
 
         var result: T = undefined;
@@ -279,7 +281,19 @@ const Parser = struct {
         const ti = @typeInfo(T);
         inline for (ti.@"struct".fields) |field| {
             if (std.mem.eql(u8, field.name, key)) {
-                // TODO: allocate if the field is a pointer
+                const fti = @typeInfo(field.type);
+                if (fti == .pointer) {
+                    if (fti.pointer.size == .one) {
+                        if (!field_map.isInitialized(field.name)) {
+                            std.debug.print("== initializing {s}\n", .{key});
+                            @field(dest, field.name) = try self.arena.allocator().create(fti.pointer.child);
+                        }
+                        const child_map = try field_map.markFieldAsInitialized(field.name);
+                        try self.parseAfterKey(fti.pointer.child, @field(dest, field.name), expected_token, child_map);
+                        return;
+                    }
+                }
+
                 const child_map = try field_map.markFieldAsInitialized(field.name);
                 try self.parseAfterKey(field.type, &@field(dest, field.name), expected_token, child_map);
                 return;
