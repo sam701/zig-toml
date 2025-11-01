@@ -23,30 +23,74 @@ pub fn parse(comptime T: type, reader: *Reader, alloc: Allocator) Error!Parsed(T
     };
 }
 
-const FieldMap = struct {
-    inner: std.StringHashMap(FieldMap),
+const Value = union(enum) {
+    object: ObjectInfo,
+    array: ObjectArray,
 
-    fn init(alloc: Allocator) FieldMap {
-        return .{ .inner = std.StringHashMap(FieldMap).init(alloc) };
+    fn deinit(self: *Value) void {
+        switch (self.*) {
+            inline else => |*x| x.deinit(),
+        }
+    }
+};
+
+const ObjectArray = struct {
+    alloc: Allocator,
+    objects: std.ArrayList(Value),
+    real_values_ptr: *anyopaque,
+
+    // ooo
+    fn init(alloc: Allocator, real_values_ptr: *anyopaque) ObjectArray {
+        return .{
+            .objects = std.ArrayList(Value).empty,
+            .alloc = alloc,
+            .real_values_ptr = real_values_ptr,
+        };
     }
 
-    fn deinit(self: *FieldMap) void {
-        var it = self.inner.valueIterator();
+    fn deinit(self: *ObjectArray) void {
+        for (self.objects.items) |*obj| {
+            obj.deinit();
+        }
+        self.objects.deinit(self.alloc);
+    }
+};
+
+const ObjectInfo = struct {
+    fields: std.StringHashMap(Value),
+
+    fn init(alloc: Allocator) ObjectInfo {
+        return .{ .fields = std.StringHashMap(Value).init(alloc) };
+    }
+
+    fn deinit(self: *ObjectInfo) void {
+        var it = self.fields.valueIterator();
         while (it.next()) |v| {
             v.deinit();
         }
-        self.inner.deinit();
+        self.fields.deinit();
     }
 
-    fn markFieldAsInitialized(self: *FieldMap, field_name: []const u8) error{OutOfMemory}!*FieldMap {
-        if (!self.inner.contains(field_name)) {
-            try self.inner.put(field_name, FieldMap.init(self.inner.allocator));
+    fn markAsObject(self: *ObjectInfo, field_name: []const u8) error{OutOfMemory}!*ObjectInfo {
+        const result = try self.fields.getOrPut(field_name);
+        if (!result.found_existing) {
+            result.value_ptr.* = Value{ .object = ObjectInfo.init(self.fields.allocator) };
         }
-        return self.inner.getPtr(field_name).?;
+
+        return &result.value_ptr.object;
     }
 
-    fn isInitialized(self: *const FieldMap, field_name: []const u8) bool {
-        return self.inner.contains(field_name);
+    fn markAsArray(self: *ObjectInfo, field_name: []const u8) error{OutOfMemory}!*ObjectArray {
+        const result = try self.fields.getOrPut(field_name);
+        if (!result.found_existing) {
+            result.value_ptr.* = Value{ .array = ObjectArray.init(self.fields.allocator) };
+        }
+
+        return &result.value_ptr.array;
+    }
+
+    fn isFieldInitialized(self: *const ObjectInfo, field_name: []const u8) bool {
+        return self.fields.contains(field_name);
     }
 };
 
@@ -56,7 +100,7 @@ const Parser = struct {
     token_location: ?SourceLocation = null,
     current_token: ?Token = null,
     advance: bool = true,
-    top_level_field_map: FieldMap,
+    top_level_object: ObjectInfo,
 
     pub fn init(reader: *Reader, alloc: Allocator) error{OutOfMemory}!Parser {
         const arena = try alloc.create(ArenaAllocator);
@@ -64,13 +108,13 @@ const Parser = struct {
         return .{
             .arena = arena,
             .scanner = try Scanner.init(reader, alloc),
-            .top_level_field_map = FieldMap.init(alloc),
+            .top_level_object = ObjectInfo.init(alloc),
         };
     }
 
     pub fn deinit(self: *Parser) void {
         self.scanner.deinit();
-        self.top_level_field_map.deinit();
+        self.top_level_object.deinit();
     }
 
     fn nextToken(self: *Parser, hint: ?Scanner.Hint) Error!Token {
@@ -104,10 +148,10 @@ const Parser = struct {
 
             switch (token.kind) {
                 .bare_key, .string => {
-                    try self.parseKey(T, &result, token.content, .equal, &self.top_level_field_map);
+                    try self.parseKey(T, &result, token.content, .equal, &self.top_level_object);
                 },
-                .left_bracket => try self.parseTableHeader(T, &result, .right_bracket, &self.top_level_field_map),
-                .double_left_bracket => unreachable,
+                .left_bracket => try self.parseTableHeader(T, &result, .right_bracket, &self.top_level_object),
+                .double_left_bracket => try self.parseTableHeader(T, &result, .double_right_bracket, &self.top_level_object),
                 .line_break => {},
                 .end_of_document => break,
                 else => return error.UnexpectedToken,
@@ -117,17 +161,17 @@ const Parser = struct {
         return result;
     }
 
-    fn parseTableHeader(self: *Parser, comptime T: type, dest: *T, expected_token: TokenKind, field_map: *FieldMap) Error!void {
+    fn parseTableHeader(self: *Parser, comptime T: type, dest: *T, expected_token: TokenKind, object_info: *ObjectInfo) Error!void {
         const token = try self.nextToken(null);
         switch (token.kind) {
             .bare_key, .string => {
-                try self.parseKey(T, dest, token.content, expected_token, field_map);
+                try self.parseKey(T, dest, token.content, expected_token, object_info);
             },
             else => return error.UnexpectedToken,
         }
     }
 
-    fn parseTableContent(self: *Parser, comptime T: type, dest: *T, field_map: *FieldMap) Error!void {
+    fn parseTableContent(self: *Parser, comptime T: type, dest: *T, object_info: *ObjectInfo) Error!void {
         const ti = @typeInfo(T);
         if (ti != .@"struct") return error.NotStruct;
 
@@ -135,9 +179,7 @@ const Parser = struct {
             const token = try self.nextToken(.top_level);
 
             switch (token.kind) {
-                .bare_key, .string => {
-                    try self.parseKey(T, dest, token.content, .equal, field_map);
-                },
+                .bare_key, .string => try self.parseKey(T, dest, token.content, .equal, object_info),
                 .left_bracket, .double_left_bracket, .end_of_document => {
                     self.pushBack();
                     break;
@@ -148,11 +190,11 @@ const Parser = struct {
         }
     }
 
-    fn parseValue(self: *Parser, comptime T: type, field_map: *FieldMap) Error!T {
+    fn parseValue(self: *Parser, comptime T: type, object_info: *ObjectInfo) Error!T {
         const ti = @typeInfo(T);
 
         const token = try self.nextToken(.expect_value);
-        // std.debug.print("kind = {}, context = {s} loc = {any}\n", .{ token.kind, token.content, token.location });
+        std.debug.print("parseValue kind = {}, context = {s} loc = {any}\n", .{ token.kind, token.content, token.location });
         switch (ti) {
             .int => {
                 if (token.kind != .number) return error.InvalidValueType;
@@ -173,7 +215,7 @@ const Parser = struct {
                 if (pi.size == .one) {
                     self.pushBack();
                     const result = try self.arena.allocator().create(pi.child);
-                    result.* = try self.parseInnerTable(pi.child, field_map);
+                    result.* = try self.parseInnerTable(pi.child, object_info);
                     return result;
                 }
                 switch (pi.child) {
@@ -187,7 +229,7 @@ const Parser = struct {
                     },
                     else => {
                         if (token.kind != .left_bracket) return error.UnexpectedToken;
-                        return self.parseArrayValue(pi.child, field_map);
+                        return self.parseArrayValue(pi.child, object_info);
                     },
                 }
             },
@@ -209,7 +251,7 @@ const Parser = struct {
             },
             .@"struct" => {
                 self.pushBack();
-                return self.parseInnerTable(T, field_map);
+                return self.parseInnerTable(T, object_info);
             },
 
             else => {},
@@ -218,7 +260,7 @@ const Parser = struct {
         unreachable;
     }
 
-    fn parseInnerTable(self: *Parser, comptime T: type, field_map: *FieldMap) Error!T {
+    fn parseInnerTable(self: *Parser, comptime T: type, object_info: *ObjectInfo) Error!T {
         const ti = @typeInfo(T);
         if (ti != .@"struct") return error.NotStruct;
 
@@ -231,7 +273,7 @@ const Parser = struct {
             token = try self.nextToken(null);
             switch (token.kind) {
                 .bare_key, .string => {
-                    try self.parseKey(T, &result, token.content, .equal, field_map);
+                    try self.parseKey(T, &result, token.content, .equal, object_info);
                 },
                 else => return error.UnexpectedToken,
             }
@@ -247,7 +289,7 @@ const Parser = struct {
         return result;
     }
 
-    fn parseArrayValue(self: *Parser, comptime T: type, field_map: *FieldMap) Error![]T {
+    fn parseArrayValue(self: *Parser, comptime T: type, object_info: *ObjectInfo) Error![]T {
         var ar = std.ArrayList(T).empty;
         while (true) {
             try self.skipLineBreaks(.expect_value);
@@ -255,7 +297,7 @@ const Parser = struct {
             if (token.kind == .right_bracket) break;
             self.pushBack();
 
-            try ar.append(self.arena.allocator(), try self.parseValue(T, field_map));
+            try ar.append(self.arena.allocator(), try self.parseValue(T, object_info));
             try self.skipLineBreaks(null);
             token = try self.nextToken(null);
             switch (token.kind) {
@@ -277,53 +319,99 @@ const Parser = struct {
         }
     }
 
-    fn parseKey(self: *Parser, comptime T: type, dest: *T, key: []const u8, expected_token: TokenKind, field_map: *FieldMap) Error!void {
+    fn processPointerToOne(self: *Parser, comptime T: type, dest: *T, comptime FieldType: type, comptime field_name: []const u8, expected_token: TokenKind, object_info: *ObjectInfo) Error!void {
+        const result = try object_info.fields.getOrPut(field_name);
+        if (!result.found_existing) {
+            std.debug.print("== initializing .one {s}\n", .{field_name});
+            @field(dest, field_name) = try self.arena.allocator().create(FieldType);
+
+            result.value_ptr.* = Value{ .object = ObjectInfo.init(self.arena.allocator()) };
+        }
+
+        try self.parseAfterKey(FieldType, @field(dest, field_name), expected_token, &result.value_ptr.object);
+    }
+
+    fn processPointerToMany(self: *Parser, comptime T: type, dest: *T, comptime FT: type, comptime field_name: []const u8, expected_token: TokenKind, object_info: *ObjectInfo) Error!void {
+        const AT = std.ArrayList(FT);
+        const result = try object_info.fields.getOrPut(field_name);
+        if (!result.found_existing) {
+            std.debug.print("== initializing .slice {s}\n", .{field_name});
+            // ttt
+
+            const list = try self.arena.allocator().create(AT);
+            list.* = .{};
+
+            result.value_ptr.* = Value{ .array = ObjectArray.init(self.arena.allocator(), @ptrCast(list)) };
+        }
+        _ = dest;
+
+        var ar: *AT = @ptrCast(@alignCast(result.value_ptr.array.real_values_ptr));
+        const value_ptr = try ar.addOne(self.arena.allocator());
+
+        try result.value_ptr.array.objects.append(self.arena.allocator(), Value{ .object = ObjectInfo.init(self.arena.allocator()) });
+
+        try self.parseAfterKey(FT, value_ptr, expected_token, &result.value_ptr.array.objects.items[result.value_ptr.array.objects.items.len - 1].object);
+    }
+
+    fn peekNextTokenKind(self: *Parser, expected_token: TokenKind) Error!TokenKind {
+        const hint: ?Scanner.Hint = if (expected_token == .double_right_bracket) .after_double_bracket else null;
+        const tt = try self.nextToken(hint);
+        std.debug.print("// tt = {any}, expected={any}\n", .{ tt.kind, expected_token });
+        self.pushBack();
+        return tt.kind;
+    }
+
+    fn parseKey(self: *Parser, comptime T: type, dest: *T, key: []const u8, expected_token: TokenKind, object_info: *ObjectInfo) Error!void {
         const ti = @typeInfo(T);
+
         inline for (ti.@"struct".fields) |field| {
             if (std.mem.eql(u8, field.name, key)) {
                 const fti = @typeInfo(field.type);
                 if (fti == .pointer) {
-                    if (fti.pointer.size == .one) {
-                        if (!field_map.isInitialized(field.name)) {
-                            std.debug.print("== initializing {s}\n", .{key});
-                            @field(dest, field.name) = try self.arena.allocator().create(fti.pointer.child);
-                        }
-                        const child_map = try field_map.markFieldAsInitialized(field.name);
-                        try self.parseAfterKey(fti.pointer.child, @field(dest, field.name), expected_token, child_map);
-                        return;
+                    switch (fti.pointer.size) {
+                        .one => return self.processPointerToOne(T, dest, fti.pointer.child, field.name, expected_token, object_info),
+                        .slice => {},
+                        else => unreachable,
+                    }
+                    switch (fti.pointer.child) {
+                        u8 => {},
+                        else => {
+                            if (try self.peekNextTokenKind(expected_token) != .equal) {
+                                return self.processPointerToMany(T, dest, fti.pointer.child, field.name, expected_token, object_info);
+                            }
+                        },
                     }
                 }
 
-                const child_map = try field_map.markFieldAsInitialized(field.name);
-                try self.parseAfterKey(field.type, &@field(dest, field.name), expected_token, child_map);
-                return;
+                const obj_info = try object_info.markAsObject(field.name);
+                return self.parseAfterKey(field.type, &@field(dest, field.name), expected_token, obj_info);
             }
         }
 
         return error.UnexpectedToken;
     }
 
-    fn parseAfterKey(self: *Parser, comptime T: type, dest: *T, expected_token: TokenKind, field_map: *FieldMap) Error!void {
+    fn parseAfterKey(self: *Parser, comptime T: type, dest: *T, expected_token: TokenKind, object_info: *ObjectInfo) Error!void {
         const token = try self.nextToken(null);
         if (token.kind == .dot) {
-            try self.parseAfterDot(T, dest, expected_token, field_map);
+            try self.parseAfterDot(T, dest, expected_token, object_info);
         } else {
             if (token.kind != expected_token) return error.UnexpectedToken;
             if (token.kind == .equal) {
-                dest.* = try self.parseValue(T, field_map);
+                dest.* = try self.parseValue(T, object_info);
             } else {
-                try self.parseTableContent(T, dest, field_map);
+                try self.parseTableContent(T, dest, object_info);
             }
         }
     }
 
-    fn parseAfterDot(self: *Parser, comptime T: type, dest: *T, expected_token: TokenKind, field_map: *FieldMap) Error!void {
+    fn parseAfterDot(self: *Parser, comptime T: type, dest: *T, expected_token: TokenKind, object_info: *ObjectInfo) Error!void {
         const token = try self.nextToken(null);
         if (token.kind != .bare_key and token.kind != .string) return error.UnexpectedToken;
 
         const ti = @typeInfo(T);
         if (ti != .@"struct") return error.UnexpectedToken;
 
-        try self.parseKey(T, dest, token.content, expected_token, field_map);
+        try self.parseKey(T, dest, token.content, expected_token, object_info);
     }
 };
