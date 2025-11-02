@@ -104,9 +104,14 @@ pub fn Parser(comptime Target: type) type {
 
             const size = try file.getEndPos();
             const content = try self.alloc.alloc(u8, size);
-
-            _ = try file.readAll(content);
             defer self.alloc.free(content);
+
+            var buf: [4096]u8 = undefined;
+            var w = std.Io.Writer.fixed(content);
+            var io = std.Io.Threaded.init_single_threaded;
+            var r = file.reader(io.ioBasic(), &buf);
+            _ = try w.sendFileAll(&r, .limited(size));
+            try w.flush();
 
             return self.parseString(content);
         }
