@@ -37,14 +37,13 @@ const Value = union(enum) {
 const ObjectArray = struct {
     alloc: Allocator,
     objects: std.ArrayList(Value),
-    real_values_ptr: *anyopaque,
+    field_values_array_list: *anyopaque,
 
-    // ooo
     fn init(alloc: Allocator, real_values_ptr: *anyopaque) ObjectArray {
         return .{
             .objects = std.ArrayList(Value).empty,
             .alloc = alloc,
-            .real_values_ptr = real_values_ptr,
+            .field_values_array_list = real_values_ptr,
         };
     }
 
@@ -87,10 +86,6 @@ const ObjectInfo = struct {
         }
 
         return &result.value_ptr.array;
-    }
-
-    fn isFieldInitialized(self: *const ObjectInfo, field_name: []const u8) bool {
-        return self.fields.contains(field_name);
     }
 };
 
@@ -331,26 +326,25 @@ const Parser = struct {
         try self.parseAfterKey(FieldType, @field(dest, field_name), expected_token, &result.value_ptr.object);
     }
 
-    fn processPointerToMany(self: *Parser, comptime T: type, dest: *T, comptime FT: type, comptime field_name: []const u8, expected_token: TokenKind, object_info: *ObjectInfo) Error!void {
-        const AT = std.ArrayList(FT);
+    fn processPointerToMany(self: *Parser, comptime T: type, dest: *T, comptime FieldType: type, comptime field_name: []const u8, expected_token: TokenKind, object_info: *ObjectInfo) Error!void {
+        const FieldValueArrayList = std.ArrayList(FieldType);
         const result = try object_info.fields.getOrPut(field_name);
         if (!result.found_existing) {
             std.debug.print("== initializing .slice {s}\n", .{field_name});
-            // ttt
 
-            const list = try self.arena.allocator().create(AT);
+            const list = try self.arena.allocator().create(FieldValueArrayList);
             list.* = .{};
 
             result.value_ptr.* = Value{ .array = ObjectArray.init(self.arena.allocator(), @ptrCast(list)) };
         }
-        _ = dest;
 
-        var ar: *AT = @ptrCast(@alignCast(result.value_ptr.array.real_values_ptr));
+        var ar: *FieldValueArrayList = @ptrCast(@alignCast(result.value_ptr.array.field_values_array_list));
         const value_ptr = try ar.addOne(self.arena.allocator());
+        @field(dest, field_name) = ar.items;
 
         try result.value_ptr.array.objects.append(self.arena.allocator(), Value{ .object = ObjectInfo.init(self.arena.allocator()) });
 
-        try self.parseAfterKey(FT, value_ptr, expected_token, &result.value_ptr.array.objects.items[result.value_ptr.array.objects.items.len - 1].object);
+        try self.parseAfterKey(FieldType, value_ptr, expected_token, &result.value_ptr.array.objects.items[result.value_ptr.array.objects.items.len - 1].object);
     }
 
     fn peekNextTokenKind(self: *Parser, expected_token: TokenKind) Error!TokenKind {
