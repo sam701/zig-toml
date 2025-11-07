@@ -164,7 +164,9 @@ const Parser = struct {
         std.debug.print("token={any} {s}\n", .{ t.kind, t.content });
         return t;
     }
-    fn pushBack(self: *Parser) void {
+
+    // Ungets the current token so it will be returned again on the next call to nextToken.
+    fn ungetToken(self: *Parser) void {
         self.advance = false;
     }
 
@@ -219,7 +221,7 @@ const Parser = struct {
             switch (token.kind) {
                 .bare_key, .string => try self.parseKey(T, dest, token.content, .equal, object_info),
                 .left_bracket, .double_left_bracket, .end_of_document => {
-                    self.pushBack();
+                    self.ungetToken();
                     break;
                 },
                 .line_break => {},
@@ -251,7 +253,7 @@ const Parser = struct {
             },
             .pointer => |pi| {
                 if (pi.size == .one) {
-                    self.pushBack();
+                    self.ungetToken();
                     const result = try self.arena.allocator().create(pi.child);
                     result.* = try self.parseInnerTable(pi.child, object_info);
                     return result;
@@ -288,7 +290,7 @@ const Parser = struct {
                 }
             },
             .@"struct" => {
-                self.pushBack();
+                self.ungetToken();
                 return self.parseInnerTable(T, object_info);
             },
 
@@ -333,7 +335,7 @@ const Parser = struct {
             try self.skipLineBreaks(.expect_value);
             var token = try self.nextToken(.expect_value);
             if (token.kind == .right_bracket) break;
-            self.pushBack();
+            self.ungetToken();
 
             try ar.append(self.arena.allocator(), try self.parseValue(T, object_info));
             try self.skipLineBreaks(null);
@@ -351,7 +353,7 @@ const Parser = struct {
         while (true) {
             const t = try self.nextToken(hint);
             if (t.kind != .line_break) {
-                self.pushBack();
+                self.ungetToken();
                 break;
             }
         }
@@ -405,7 +407,7 @@ const Parser = struct {
         const hint: ?Scanner.Hint = if (expected_token == .double_right_bracket) .after_double_bracket else null;
         const tt = try self.nextToken(hint);
         std.debug.print("// tt = {any}, expected={any}\n", .{ tt.kind, expected_token });
-        self.pushBack();
+        self.ungetToken();
         return tt.kind;
     }
 
