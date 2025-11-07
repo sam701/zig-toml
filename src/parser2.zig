@@ -64,9 +64,8 @@ const ObjectInfo = struct {
 
     fn deinit(self: *ObjectInfo) void {
         var it = self.fields.valueIterator();
-        while (it.next()) |v| {
-            v.deinit();
-        }
+        while (it.next()) |v| v.deinit();
+
         self.fields.deinit();
     }
 
@@ -89,6 +88,43 @@ const ObjectInfo = struct {
     }
 };
 
+const Finalizer = struct {
+    finalize_fn: *const fn (ctx: *anyopaque, Allocator) void,
+    context: *anyopaque,
+
+    fn init(
+        comptime T: type,
+        comptime FieldType: type,
+        comptime field_name: []const u8,
+        dest: *T,
+        array_list_ptr: *anyopaque,
+        allocator: Allocator,
+    ) error{OutOfMemory}!Finalizer {
+        const FieldValueArrayList = std.ArrayList(FieldType);
+
+        const FinalizerCtx = struct {
+            array_list: *FieldValueArrayList,
+            dest: *T,
+
+            fn finalize(ctx: *anyopaque, alloc: Allocator) void {
+                const self_ctx: *@This() = @ptrCast(@alignCast(ctx));
+                @field(self_ctx.dest, field_name) = self_ctx.array_list.toOwnedSlice(alloc) catch unreachable;
+            }
+        };
+
+        const finalizer_ctx = try allocator.create(FinalizerCtx);
+        finalizer_ctx.* = .{
+            .array_list = @ptrCast(@alignCast(array_list_ptr)),
+            .dest = dest,
+        };
+
+        return .{
+            .finalize_fn = FinalizerCtx.finalize,
+            .context = @ptrCast(finalizer_ctx),
+        };
+    }
+};
+
 const Parser = struct {
     arena: *ArenaAllocator,
     scanner: Scanner,
@@ -96,6 +132,7 @@ const Parser = struct {
     current_token: ?Token = null,
     advance: bool = true,
     top_level_object: ObjectInfo,
+    finalizers: std.ArrayList(Finalizer) = .empty,
 
     pub fn init(reader: *Reader, alloc: Allocator) error{OutOfMemory}!Parser {
         const arena = try alloc.create(ArenaAllocator);
@@ -110,6 +147,7 @@ const Parser = struct {
     pub fn deinit(self: *Parser) void {
         self.scanner.deinit();
         self.top_level_object.deinit();
+        self.finalizers.deinit(self.arena.allocator());
     }
 
     fn nextToken(self: *Parser, hint: ?Scanner.Hint) Error!Token {
@@ -151,6 +189,11 @@ const Parser = struct {
                 .end_of_document => break,
                 else => return error.UnexpectedToken,
             }
+        }
+
+        // Run all finalizers
+        for (self.finalizers.items) |finalizer| {
+            finalizer.finalize_fn(finalizer.context, self.arena.allocator());
         }
 
         return result;
@@ -336,11 +379,22 @@ const Parser = struct {
             list.* = .{};
 
             result.value_ptr.* = Value{ .array = ObjectArray.init(self.arena.allocator(), @ptrCast(list)) };
+
+            // Register finalizer to set dest field to toOwnedSlice
+            const finalizer = try Finalizer.init(
+                T,
+                FieldType,
+                field_name,
+                dest,
+                result.value_ptr.array.field_values_array_list,
+                self.arena.allocator(),
+            );
+
+            try self.finalizers.append(self.arena.allocator(), finalizer);
         }
 
         var ar: *FieldValueArrayList = @ptrCast(@alignCast(result.value_ptr.array.field_values_array_list));
         const value_ptr = try ar.addOne(self.arena.allocator());
-        @field(dest, field_name) = ar.items;
 
         try result.value_ptr.array.objects.append(self.arena.allocator(), Value{ .object = ObjectInfo.init(self.arena.allocator()) });
 
