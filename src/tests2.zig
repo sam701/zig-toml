@@ -29,6 +29,7 @@ const MainStruct = struct {
     st7: *Struct3,
     st8: *Struct3,
     ta1: []Struct1,
+    date1: []const u8,
 };
 const Struct1 = struct { i1: i32, b1: bool };
 const Struct2 = struct { st1: Struct1 };
@@ -59,6 +60,9 @@ test "full" {
         \\
         \\ st3."b1" = true
         \\ st4 = { st1.i1 = 3, st1.b1 = true}
+        \\ date1 = 2025-11-23
+        \\
+        \\
         \\ [st5]
         \\ st1.i1 = 3
         \\ st1.b1 = true
@@ -94,6 +98,7 @@ test "full" {
     try expectEqualStrings(" line1", result.value.s4);
     try expectEqualStrings("abc", &result.value.a1);
     try expectEqualSlices(i32, &.{ 1, 2 }, result.value.a5);
+    try expectEqualStrings("2025-11-23", result.value.date1);
 
     try expectEqual(2, result.value.an1.len);
     try expectEqualSlices(i32, &.{ 1, 2 }, result.value.an1[0]);
