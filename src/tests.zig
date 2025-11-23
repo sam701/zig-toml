@@ -44,6 +44,19 @@ test "parse into struct" {
         EnumValue1,
         EnumValue2,
     };
+    const UEnum = enum {
+        s1,
+        s2,
+        i1,
+        abc,
+    };
+
+    const U1 = union(UEnum) {
+        s1: []const u8,
+        s2: []const u8,
+        i1: i32,
+        abc,
+    };
     const Aa = struct {
         aa: i64,
         aa2: i8,
@@ -74,6 +87,8 @@ test "parse into struct" {
         tab2: *Table,
         hm: main.HashMap(Tt),
         hm2: *main.HashMap(Tt),
+        u1: U1,
+        u2: U1,
     };
 
     var p = main.Parser(Aa).init(testing.allocator);
@@ -149,6 +164,9 @@ test "parse into struct" {
     try testing.expectEqual(6, aa.hm2.map.get("f2").?.bb);
     try testing.expectEqual(10, aa.hm2.map.get("f3").?.aa);
     try testing.expectEqual(11, aa.hm2.map.get("f3").?.bb);
+
+    try testing.expectEqualStrings("string2", aa.u1.s2);
+    try testing.expectEqual(UEnum.abc, aa.u2);
 }
 
 test "optionals (--release=fast/safe)" {
