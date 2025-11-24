@@ -14,8 +14,18 @@ pub const Error = Scanner.Error || std.fmt.ParseIntError || std.fmt.ParseFloatEr
     InvalidValueType,
 };
 
+const NoOpDateTimeParser = struct {
+    pub fn parseDate(str: []const u8, alloc: Allocator) Error![]const u8 {
+        return alloc.dupe(u8, str);
+    }
+};
+
 pub fn parse(comptime T: type, reader: *Reader, alloc: Allocator) Error!Parsed(T) {
-    var p = try Parser(NoOpDateTimeParser).init(reader, alloc);
+    return parseWithDatetimeParser(T, reader, alloc, NoOpDateTimeParser);
+}
+
+pub fn parseWithDatetimeParser(comptime T: type, reader: *Reader, alloc: Allocator, comptime DatetimeParser: type) Error!Parsed(T) {
+    var p = try Parser(DatetimeParser).init(reader, alloc);
     defer p.deinit();
     return Parsed(T){
         .arena = p.arena,
@@ -122,12 +132,6 @@ const SliceFinalizer = struct {
             .finalize_fn = FinalizerCtx.finalize,
             .context = @ptrCast(finalizer_ctx),
         };
-    }
-};
-
-const NoOpDateTimeParser = struct {
-    pub fn parseDate(str: []const u8, alloc: Allocator) Error![]const u8 {
-        return alloc.dupe(u8, str);
     }
 };
 
