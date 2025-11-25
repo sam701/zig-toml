@@ -194,6 +194,33 @@ fn setValue(ctx: *Context, comptime T: type, dest: *T, value: *const Value) !voi
                 else => return error.InvalidValueType,
             }
         },
+        .@"union" => |tinfo| {
+            inline for (tinfo.fields) |field| {
+                switch (value.*) {
+                    .string => |s| {
+                        if (std.mem.eql(u8, field.name, s)) {
+                            if (field.type == void) {
+                                dest.* = @unionInit(T, field.name, {});
+                                break;
+                            }
+                        }
+                    },
+                    .table => |tbl| {
+                        const new_value = tbl.get(field.name);
+
+                        if (new_value != null) {
+                            var temp_test: field.type = undefined;
+                            try setValue(ctx, field.type, &temp_test, &new_value.?);
+                            dest.* = @unionInit(T, field.name, temp_test);
+                            break;
+                        }
+                    },
+                    else => return error.InvalidValueType,
+                }
+            } else {
+                return error.InvalidValueType;
+            }
+        },
         else => return error.NotSupportedFieldType,
     }
 }

@@ -107,14 +107,18 @@ test "unions" {
         f1: u8,
         f2: u16,
         f3: []const u8,
+        abc,
     };
 
     const u = MyUnion{ .f1 = 255 };
     var buf: [64]u8 = undefined;
     var writer = std.Io.Writer.fixed(&buf);
     try serialize(Allocator, u, &writer);
-    try testing.expectEqualSlices(u8, "255", writer.buffered());
+    try testing.expectEqualStrings("{ f1 = 255 }", writer.buffered());
     writer.end = 0;
+
+    try serialize(Allocator, MyUnion.abc, &writer);
+    try testing.expectEqualStrings("\"abc\"", writer.buffered());
 }
 
 test "strings" {

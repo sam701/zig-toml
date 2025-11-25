@@ -22,6 +22,9 @@ t1.aa = 3
 t1.bb = 4
 t2 = {aa = 5, bb = 6}
 
+u1 = { s2 = "string2" }
+u2 = "abc"
+
 [t3]
   aa = 11
     bb = 15

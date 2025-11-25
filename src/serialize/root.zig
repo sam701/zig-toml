@@ -235,7 +235,16 @@ fn serializeValue(state: *SerializerState, t: std.builtin.Type, value: anytype, 
         .@"enum" => try writer.print("\"{s}\"", .{@tagName(value)}),
         .@"union" => {
             switch (value) {
-                inline else => |s| try serializeValue(state, @typeInfo(@TypeOf(s)), s, writer),
+                inline else => |s| {
+                    const tag_name = @tagName(value);
+                    if (@TypeOf(s) == void) {
+                        try writer.print("\"{s}\"", .{tag_name});
+                    } else {
+                        try writer.print("{{ {s} = ", .{tag_name});
+                        try serializeValue(state, @typeInfo(@TypeOf(s)), s, writer);
+                        try writer.print(" }}", .{});
+                    }
+                },
             }
         },
         .optional => {
