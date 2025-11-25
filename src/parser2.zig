@@ -29,6 +29,10 @@ const NoOpDateTimeParser = struct {
     }
 };
 
+// TODO: add options that can specify
+// - how to treat missing fields,
+// - how to treat non-existing fields
+
 /// Parse TOML from a reader into type T.
 /// Datetime values (date, datetime, datetime-local, time) are returned as strings.
 pub fn parse(comptime T: type, reader: *Reader, alloc: Allocator) Error!Parsed(T) {
@@ -351,6 +355,9 @@ fn Parser(comptime DateTimeParser: type) type {
                     self.ungetToken();
                     return self.parseInnerTable(T, object_info);
                 },
+                .optional => unreachable,
+                .@"enum" => unreachable,
+                .@"union" => unreachable,
 
                 else => {},
             }
