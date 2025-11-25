@@ -30,6 +30,11 @@ const MainStruct = struct {
     st8: *Struct3,
     ta1: []Struct1,
     date1: []const u8,
+    datetime: []const u8,
+    datetime_local: []const u8,
+    time: []const u8,
+    opt1: ?i32,
+    opt2: ?i32 = null,
 };
 const Struct1 = struct { i1: i32, b1: bool };
 const Struct2 = struct { st1: Struct1 };
@@ -61,6 +66,11 @@ test "full" {
         \\ st3."b1" = true
         \\ st4 = { st1.i1 = 3, st1.b1 = true}
         \\ date1 = 2025-11-23
+        \\ datetime = 2025-11-23T03:34:85+02:00
+        \\ datetime_local = 2025-11-23 03:34:85
+        \\ time = 03:34:85
+        \\ opt1 = 34
+        \\ opt2 = null
         \\
         \\
         \\ [st5]
@@ -99,6 +109,11 @@ test "full" {
     try expectEqualStrings("abc", &result.value.a1);
     try expectEqualSlices(i32, &.{ 1, 2 }, result.value.a5);
     try expectEqualStrings("2025-11-23", result.value.date1);
+    try expectEqualStrings("2025-11-23T03:34:85+02:00", result.value.datetime);
+    try expectEqualStrings("2025-11-23 03:34:85", result.value.datetime_local);
+    try expectEqualStrings("03:34:85", result.value.time);
+    try expectEqual(34, result.value.opt1);
+    try expectEqual(null, result.value.opt2);
 
     try expectEqual(2, result.value.an1.len);
     try expectEqualSlices(i32, &.{ 1, 2 }, result.value.an1[0]);
