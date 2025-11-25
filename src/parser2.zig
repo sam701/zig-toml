@@ -18,13 +18,33 @@ const NoOpDateTimeParser = struct {
     pub fn parseDate(str: []const u8, alloc: Allocator) Error![]const u8 {
         return alloc.dupe(u8, str);
     }
+    pub fn parseDatetime(str: []const u8, alloc: Allocator) Error![]const u8 {
+        return alloc.dupe(u8, str);
+    }
+    pub fn parseDatetimeLocal(str: []const u8, alloc: Allocator) Error![]const u8 {
+        return alloc.dupe(u8, str);
+    }
+    pub fn parseTime(str: []const u8, alloc: Allocator) Error![]const u8 {
+        return alloc.dupe(u8, str);
+    }
 };
 
+/// Parse TOML from a reader into type T.
+/// Datetime values (date, datetime, datetime-local, time) are returned as strings.
 pub fn parse(comptime T: type, reader: *Reader, alloc: Allocator) Error!Parsed(T) {
-    return parseWithDatetimeParser(T, reader, alloc, NoOpDateTimeParser);
+    return parseWith(T, reader, alloc, NoOpDateTimeParser);
 }
 
-pub fn parseWithDatetimeParser(comptime T: type, reader: *Reader, alloc: Allocator, comptime DatetimeParser: type) Error!Parsed(T) {
+/// Parse TOML from a reader into type T with a custom datetime parser.
+///
+/// The DatetimeParser type must provide the following functions:
+/// - `parseDate(str: []const u8, alloc: Allocator) Error!TargetType`
+/// - `parseDatetime(str: []const u8, alloc: Allocator) Error!TargetType`
+/// - `parseDatetimeLocal(str: []const u8, alloc: Allocator) Error!TargetType`
+/// - `parseTime(str: []const u8, alloc: Allocator) Error!TargetType`
+///
+/// Each function's return type (the error union payload) must match the target field type in T.
+pub fn parseWith(comptime T: type, reader: *Reader, alloc: Allocator, comptime DatetimeParser: type) Error!Parsed(T) {
     var p = try Parser(DatetimeParser).init(reader, alloc);
     defer p.deinit();
     return Parsed(T){
@@ -243,8 +263,20 @@ fn Parser(comptime DateTimeParser: type) type {
             }
         }
 
-        fn parseDatetime(_: *Self, comptime T: type, _: *ObjectInfo) Error!?T {
-            return null;
+        fn parseDatetime(
+            self: *Self,
+            comptime T: type,
+            comptime parseFn: anytype,
+            content: []const u8,
+        ) Error!T {
+            const ParseReturnType = @typeInfo(@TypeOf(parseFn)).@"fn".return_type.?;
+            const return_type_info = @typeInfo(ParseReturnType);
+
+            if (return_type_info == .error_union and return_type_info.error_union.payload == T) {
+                return parseFn(content, self.arena.allocator());
+            }
+
+            return error.InvalidValueType;
         }
 
         fn parseValue(self: *Self, comptime T: type, object_info: *ObjectInfo) Error!T {
@@ -254,19 +286,10 @@ fn Parser(comptime DateTimeParser: type) type {
             std.debug.print("parseValue kind = {}, context = {s} loc = {any}\n", .{ token.kind, token.content, token.location });
 
             switch (token.kind) {
-                .date => {
-                    // Get the return type of DateTimeParser.parseDate
-                    const ParseDateReturnType = @typeInfo(@TypeOf(DateTimeParser.parseDate)).@"fn".return_type.?;
-
-                    // The return type should be an error union
-                    const return_type_info = @typeInfo(ParseDateReturnType);
-
-                    if (return_type_info == .error_union and return_type_info.error_union.payload == T) {
-                        return DateTimeParser.parseDate(token.content, self.arena.allocator());
-                    }
-
-                    return error.InvalidValueType;
-                },
+                .date => return self.parseDatetime(T, DateTimeParser.parseDate, token.content),
+                .datetime => return self.parseDatetime(T, DateTimeParser.parseDatetime, token.content),
+                .datetime_local => return self.parseDatetime(T, DateTimeParser.parseDatetimeLocal, token.content),
+                .time => return self.parseDatetime(T, DateTimeParser.parseTime, token.content),
                 else => {},
             }
 
