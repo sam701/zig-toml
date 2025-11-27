@@ -364,7 +364,14 @@ fn Parser(comptime DateTimeParser: type) type {
                     self.ungetToken();
                     return @as(T, try self.parseValue(tinfo.child, object_info));
                 },
-                .@"enum" => unreachable,
+                .@"enum" => {
+                    switch (token.kind) {
+                        .string => {
+                            return std.meta.stringToEnum(T, token.content) orelse return error.InvalidValueType;
+                        },
+                        else => return error.InvalidValueType,
+                    }
+                },
                 .@"union" => unreachable,
 
                 else => {},
