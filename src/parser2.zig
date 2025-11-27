@@ -372,7 +372,7 @@ fn Parser(comptime DateTimeParser: type) type {
                         else => return error.InvalidValueType,
                     }
                 },
-                .@"union" => unreachable,
+                .@"union" => return self.parseUnionValue(T, token, object_info),
 
                 else => {},
             }
@@ -491,26 +491,97 @@ fn Parser(comptime DateTimeParser: type) type {
             return tt.kind;
         }
 
+        fn parseUnionValue(self: *Self, comptime T: type, token: Token, object_info: *ObjectInfo) Error!T {
+            const union_info = @typeInfo(T).@"union";
+
+            switch (token.kind) {
+                // For void-payload unions, accept a string as the tag name
+                .string => {
+                    inline for (union_info.fields) |field| {
+                        if (std.mem.eql(u8, field.name, token.content)) {
+                            if (field.type == void) {
+                                return @unionInit(T, field.name, {});
+                            } else break;
+                        }
+                    }
+                },
+                // For non-void payload unions, parse as inline table with single field
+                .left_brace => {
+                    const key_token = try self.nextToken(null);
+                    if (key_token.kind != .bare_key and key_token.kind != .string) return error.UnexpectedToken;
+
+                    inline for (union_info.fields) |field| {
+                        if (std.mem.eql(u8, field.name, key_token.content)) {
+                            const eq_token = try self.nextToken(null);
+                            if (eq_token.kind != .equal) return error.UnexpectedToken;
+
+                            const value = try self.parseValue(field.type, object_info);
+
+                            const close_token = try self.nextToken(null);
+                            if (close_token.kind != .right_brace) return error.UnexpectedToken;
+
+                            return @unionInit(T, field.name, value);
+                        }
+                    }
+                },
+                else => {},
+            }
+            return error.InvalidValueType;
+        }
+
+        fn processUnionWithDot(self: *Self, comptime T: type, dest: *T, comptime UnionType: type, comptime field_name: []const u8, object_info: *ObjectInfo) Error!void {
+            const union_info = @typeInfo(UnionType).@"union";
+
+            const union_field_token = try self.nextToken(null);
+            if (union_field_token.kind != .bare_key and union_field_token.kind != .string) {
+                return error.UnexpectedToken;
+            }
+
+            inline for (union_info.fields) |union_field| {
+                if (std.mem.eql(u8, union_field.name, union_field_token.content)) {
+                    const eq_token = try self.nextToken(null);
+                    if (eq_token.kind != .equal) return error.UnexpectedToken;
+
+                    const value = try self.parseValue(union_field.type, object_info);
+                    @field(dest, field_name) = @unionInit(UnionType, union_field.name, value);
+                    return;
+                }
+            }
+            return error.UnexpectedToken;
+        }
+
         fn parseKey(self: *Self, comptime T: type, dest: *T, key: []const u8, expected_token: TokenKind, object_info: *ObjectInfo) Error!void {
             const ti = @typeInfo(T);
 
             inline for (ti.@"struct".fields) |field| {
                 if (std.mem.eql(u8, field.name, key)) {
                     const fti = @typeInfo(field.type);
-                    if (fti == .pointer) {
-                        switch (fti.pointer.size) {
-                            .one => return self.processPointerToOne(T, dest, fti.pointer.child, field.name, expected_token, object_info),
-                            .slice => {},
-                            else => unreachable,
-                        }
-                        switch (fti.pointer.child) {
-                            u8 => {},
-                            else => {
-                                if (try self.peekNextTokenKind(expected_token) != .equal) {
-                                    return self.processPointerToMany(T, dest, fti.pointer.child, field.name, expected_token, object_info);
-                                }
-                            },
-                        }
+                    switch (fti) {
+                        .pointer => {
+                            switch (fti.pointer.size) {
+                                .one => return self.processPointerToOne(T, dest, fti.pointer.child, field.name, expected_token, object_info),
+                                .slice => {},
+                                else => unreachable,
+                            }
+                            switch (fti.pointer.child) {
+                                u8 => {},
+                                else => {
+                                    if (try self.peekNextTokenKind(expected_token) != .equal) {
+                                        return self.processPointerToMany(T, dest, fti.pointer.child, field.name, expected_token, object_info);
+                                    }
+                                },
+                            }
+                        },
+                        // Handle union types with dotted notation (e.g., value.number = 42)
+                        .@"union" => {
+                            const next_token = try self.nextToken(null);
+                            if (next_token.kind == .dot) {
+                                return self.processUnionWithDot(T, dest, field.type, field.name, object_info);
+                            } else {
+                                self.ungetToken();
+                            }
+                        },
+                        else => {},
                     }
 
                     const obj_info = try object_info.markAsObject(field.name);

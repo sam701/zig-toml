@@ -36,8 +36,18 @@ const MainStruct = struct {
     opt1: ?i32,
     opt2: ?i32 = null,
     e1: E1,
+    u1: U1,
+    u2: U1,
+    u3: U1,
+    u4: U1,
 };
-const E1 = enum { value1, value2 };
+const E1 = enum { value1, value2, v3, v4 };
+const U1 = union(E1) {
+    value1: []const u8,
+    value2: i32,
+    v3,
+    v4: *Struct1,
+};
 const Struct1 = struct { i1: i32, b1: bool };
 const Struct2 = struct { st1: Struct1 };
 const Struct3 = struct { st1: *Struct1 };
@@ -74,6 +84,11 @@ test "full" {
         \\ opt1 = 34
         \\ opt2 = null
         \\ e1 = "value2"
+        \\ u1.value1 = "t3"
+        \\ u2 = "v3"
+        \\ u3  = {value2 = 678}
+        // \\ u4.v4.i1 = 12
+        // \\ u4.v4.b1 = true
         \\
         \\
         \\ [st5]
@@ -118,6 +133,11 @@ test "full" {
     try expectEqual(34, result.value.opt1);
     try expectEqual(null, result.value.opt2);
     try expectEqual(E1.value2, result.value.e1);
+    try expectEqualStrings("t3", result.value.u1.value1);
+    try expectEqual(678, result.value.u3.value2);
+    try expectEqual(E1.v3, result.value.u2);
+    // try expectEqual(12, result.value.u4.v4.i1);
+    // try expectEqual(true, result.value.u4.v4.b1);
 
     try expectEqual(2, result.value.an1.len);
     try expectEqualSlices(i32, &.{ 1, 2 }, result.value.an1[0]);
