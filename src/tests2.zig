@@ -76,6 +76,8 @@ test "full" {
         \\ 'st2' = { i1 = 3, b1 = true }
         \\
         \\ st3."b1" = true
+
+        // FIXME: no chained keys in inline tables
         \\ st4 = { st1.i1 = 3, st1.b1 = true}
         \\ date1 = 2025-11-23
         \\ datetime = 2025-11-23T03:34:85+02:00
@@ -87,9 +89,11 @@ test "full" {
         \\ u1.value1 = "t3"
         \\ u2 = "v3"
         \\ u3  = {value2 = 678}
-        // \\ u4.v4.i1 = 12
-        // \\ u4.v4.b1 = true
-        \\
+        \\ u4.v4.i1 = 12
+        \\ u4.v4.b1 = true
+        // \\ [u5.v4]
+        // \\ i1 = 5
+        // \\ b1 = true
         \\
         \\ [st5]
         \\ st1.i1 = 3

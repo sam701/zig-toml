@@ -393,6 +393,7 @@ fn Parser(comptime DateTimeParser: type) type {
                 token = try self.nextToken(null);
                 switch (token.kind) {
                     .bare_key, .string => {
+                        // FIXME: the next token kind must be .equal
                         try self.parseKey(T, &result, token.content, .equal, object_info);
                     },
                     else => return error.UnexpectedToken,
@@ -539,12 +540,20 @@ fn Parser(comptime DateTimeParser: type) type {
 
             inline for (union_info.fields) |union_field| {
                 if (std.mem.eql(u8, union_field.name, union_field_token.content)) {
-                    const eq_token = try self.nextToken(null);
-                    if (eq_token.kind != .equal) return error.UnexpectedToken;
+                    const token2 = try self.nextToken(null);
+                    switch (token2.kind) {
+                        .equal => {
+                            const value = try self.parseValue(union_field.type, object_info);
+                            @field(dest, field_name) = @unionInit(UnionType, union_field.name, value);
+                            return;
+                        },
+                        .dot => {
+                            const obj_info = try object_info.markAsObject(field_name);
+                            return self.parseAfterKey(field.type, &@field(dest, field.name), expected_token, obj_info);
 
-                    const value = try self.parseValue(union_field.type, object_info);
-                    @field(dest, field_name) = @unionInit(UnionType, union_field.name, value);
-                    return;
+                            try self.parseAfterDot(T, dest, expected_token, object_info);
+                        },
+                    }
                 }
             }
             return error.UnexpectedToken;
