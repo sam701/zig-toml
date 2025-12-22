@@ -40,13 +40,16 @@ const MainStruct = struct {
     u2: U1,
     u3: U1,
     u4: U1,
+    u5: U1,
+    u6: U1,
 };
-const E1 = enum { value1, value2, v3, v4 };
+const E1 = enum { value1, value2, v3, v4, v5 };
 const U1 = union(E1) {
     value1: []const u8,
     value2: i32,
     v3,
-    v4: *Struct1,
+    v4: Struct1,
+    v5: *Struct1,
 };
 const Struct1 = struct { i1: i32, b1: bool };
 const Struct2 = struct { st1: Struct1 };
@@ -91,9 +94,10 @@ test "full" {
         \\ u3  = {value2 = 678}
         \\ u4.v4.i1 = 12
         \\ u4.v4.b1 = true
-        // \\ [u5.v4]
-        // \\ i1 = 5
-        // \\ b1 = true
+        \\ u5.v4 = { i1 = 12, b1 = true }
+        \\ [u6.v4]
+        \\ i1 = 5
+        \\ b1 = true
         \\
         \\ [st5]
         \\ st1.i1 = 3
@@ -140,8 +144,12 @@ test "full" {
     try expectEqualStrings("t3", result.value.u1.value1);
     try expectEqual(678, result.value.u3.value2);
     try expectEqual(E1.v3, result.value.u2);
-    // try expectEqual(12, result.value.u4.v4.i1);
-    // try expectEqual(true, result.value.u4.v4.b1);
+    try expectEqual(12, result.value.u4.v4.i1);
+    try expectEqual(true, result.value.u4.v4.b1);
+    try expectEqual(12, result.value.u5.v4.i1);
+    try expectEqual(true, result.value.u5.v4.b1);
+    try expectEqual(5, result.value.u6.v4.i1);
+    try expectEqual(true, result.value.u6.v4.b1);
 
     try expectEqual(2, result.value.an1.len);
     try expectEqualSlices(i32, &.{ 1, 2 }, result.value.an1[0]);

@@ -240,11 +240,11 @@ fn Parser(comptime DateTimeParser: type) type {
             return result;
         }
 
-        fn parseTableHeader(self: *Self, comptime T: type, dest: *T, expected_token: TokenKind, object_info: *ObjectInfo) Error!void {
+        fn parseTableHeader(self: *Self, comptime T: type, dest: *T, expected_closing_token: TokenKind, object_info: *ObjectInfo) Error!void {
             const token = try self.nextToken(null);
             switch (token.kind) {
                 .bare_key, .string => {
-                    try self.parseKey(T, dest, token.content, expected_token, object_info);
+                    try self.parseKey(T, dest, token.content, expected_closing_token, object_info);
                 },
                 else => return error.UnexpectedToken,
             }
@@ -440,7 +440,7 @@ fn Parser(comptime DateTimeParser: type) type {
             }
         }
 
-        fn processPointerToOne(self: *Self, comptime T: type, dest: *T, comptime FieldType: type, comptime field_name: []const u8, expected_token: TokenKind, object_info: *ObjectInfo) Error!void {
+        fn processPointerToOne(self: *Self, comptime T: type, dest: *T, comptime FieldType: type, comptime field_name: []const u8, expected_closing_token: TokenKind, object_info: *ObjectInfo) Error!void {
             const result = try object_info.fields.getOrPut(field_name);
             if (!result.found_existing) {
                 std.debug.print("== initializing .one {s}\n", .{field_name});
@@ -449,15 +449,13 @@ fn Parser(comptime DateTimeParser: type) type {
                 result.value_ptr.* = Value{ .object = ObjectInfo.init(self.arena.allocator()) };
             }
 
-            try self.parseAfterKey(FieldType, @field(dest, field_name), expected_token, &result.value_ptr.object);
+            try self.parseAfterKey(FieldType, @field(dest, field_name), expected_closing_token, &result.value_ptr.object);
         }
 
-        fn processPointerToMany(self: *Self, comptime T: type, dest: *T, comptime FieldType: type, comptime field_name: []const u8, expected_token: TokenKind, object_info: *ObjectInfo) Error!void {
+        fn processPointerToMany(self: *Self, comptime T: type, dest: *T, comptime FieldType: type, comptime field_name: []const u8, expected_closing_token: TokenKind, object_info: *ObjectInfo) Error!void {
             const FieldValueArrayList = std.ArrayList(FieldType);
             const result = try object_info.fields.getOrPut(field_name);
             if (!result.found_existing) {
-                std.debug.print("== initializing .slice {s}\n", .{field_name});
-
                 const list = try self.arena.allocator().create(FieldValueArrayList);
                 list.* = .{};
 
@@ -481,13 +479,13 @@ fn Parser(comptime DateTimeParser: type) type {
 
             try result.value_ptr.array.objects.append(self.arena.allocator(), Value{ .object = ObjectInfo.init(self.arena.allocator()) });
 
-            try self.parseAfterKey(FieldType, value_ptr, expected_token, &result.value_ptr.array.objects.items[result.value_ptr.array.objects.items.len - 1].object);
+            try self.parseAfterKey(FieldType, value_ptr, expected_closing_token, &result.value_ptr.array.objects.items[result.value_ptr.array.objects.items.len - 1].object);
         }
 
-        fn peekNextTokenKind(self: *Self, expected_token: TokenKind) Error!TokenKind {
-            const hint: ?Scanner.Hint = if (expected_token == .double_right_bracket) .after_double_bracket else null;
+        fn peekNextTokenKind(self: *Self, expected_closing_token: TokenKind) Error!TokenKind {
+            const hint: ?Scanner.Hint = if (expected_closing_token == .double_right_bracket) .after_double_bracket else null;
             const tt = try self.nextToken(hint);
-            std.debug.print("// tt = {any}, expected={any}\n", .{ tt.kind, expected_token });
+            std.debug.print("// tt = {any}, expected={any}\n", .{ tt.kind, expected_closing_token });
             self.ungetToken();
             return tt.kind;
         }
@@ -530,62 +528,74 @@ fn Parser(comptime DateTimeParser: type) type {
             return error.InvalidValueType;
         }
 
-        fn processUnionWithDot(self: *Self, comptime T: type, dest: *T, comptime UnionType: type, comptime field_name: []const u8, object_info: *ObjectInfo) Error!void {
+        fn parseUnionTagKey(
+            self: *Self,
+            comptime T: type,
+            dest: *T,
+            comptime UnionType: type,
+            comptime field_name: []const u8,
+            expected_closing_token: TokenKind,
+            object_info: *ObjectInfo,
+        ) Error!void {
             const union_info = @typeInfo(UnionType).@"union";
 
-            const union_field_token = try self.nextToken(null);
-            if (union_field_token.kind != .bare_key and union_field_token.kind != .string) {
+            const union_tag_token = try self.nextToken(null);
+            if (union_tag_token.kind != .bare_key and union_tag_token.kind != .string) {
                 return error.UnexpectedToken;
             }
 
             inline for (union_info.fields) |union_field| {
-                if (std.mem.eql(u8, union_field.name, union_field_token.content)) {
-                    const token2 = try self.nextToken(null);
-                    switch (token2.kind) {
-                        .equal => {
-                            const value = try self.parseValue(union_field.type, object_info);
-                            @field(dest, field_name) = @unionInit(UnionType, union_field.name, value);
-                            return;
-                        },
-                        .dot => {
-                            const obj_info = try object_info.markAsObject(field_name);
-                            return self.parseAfterKey(field.type, &@field(dest, field.name), expected_token, obj_info);
+                if (std.mem.eql(u8, union_field.name, union_tag_token.content)) {
+                    const tag_name = union_tag_token.content;
 
-                            try self.parseAfterDot(T, dest, expected_token, object_info);
-                        },
+                    if (object_info.fields.contains(field_name)) {
+                        // Assert it's the same tag as before
+                        const active_tag_name = @tagName(std.meta.activeTag(@field(dest, field_name)));
+                        if (!std.mem.eql(u8, active_tag_name, tag_name)) return error.InvalidValueType;
+                    } else {
+                        // Set the union to the correct tag if not already set
+                        @field(dest, field_name) = @unionInit(UnionType, union_field.name, undefined);
                     }
+
+                    const obj_info = try object_info.markAsObject(field_name);
+                    return self.parseAfterKey(
+                        union_field.type,
+                        &@field(@field(dest, field_name), union_field.name),
+                        expected_closing_token,
+                        obj_info,
+                    );
                 }
             }
             return error.UnexpectedToken;
         }
 
-        fn parseKey(self: *Self, comptime T: type, dest: *T, key: []const u8, expected_token: TokenKind, object_info: *ObjectInfo) Error!void {
-            const ti = @typeInfo(T);
+        fn parseKey(self: *Self, comptime T: type, dest: *T, key: []const u8, expected_closing_token: TokenKind, object_info: *ObjectInfo) Error!void {
+            const dest_type_info = @typeInfo(T);
 
-            inline for (ti.@"struct".fields) |field| {
+            inline for (dest_type_info.@"struct".fields) |field| {
                 if (std.mem.eql(u8, field.name, key)) {
-                    const fti = @typeInfo(field.type);
-                    switch (fti) {
+                    const field_type_info = @typeInfo(field.type);
+                    switch (field_type_info) {
                         .pointer => {
-                            switch (fti.pointer.size) {
-                                .one => return self.processPointerToOne(T, dest, fti.pointer.child, field.name, expected_token, object_info),
+                            switch (field_type_info.pointer.size) {
+                                .one => return self.processPointerToOne(T, dest, field_type_info.pointer.child, field.name, expected_closing_token, object_info),
                                 .slice => {},
                                 else => unreachable,
                             }
-                            switch (fti.pointer.child) {
+                            switch (field_type_info.pointer.child) {
                                 u8 => {},
                                 else => {
-                                    if (try self.peekNextTokenKind(expected_token) != .equal) {
-                                        return self.processPointerToMany(T, dest, fti.pointer.child, field.name, expected_token, object_info);
+                                    if (try self.peekNextTokenKind(expected_closing_token) != .equal) {
+                                        return self.processPointerToMany(T, dest, field_type_info.pointer.child, field.name, expected_closing_token, object_info);
                                     }
                                 },
                             }
                         },
-                        // Handle union types with dotted notation (e.g., value.number = 42)
+                        // Handle union types with dotted notation (e.g., union1.tag_name = 42)
                         .@"union" => {
                             const next_token = try self.nextToken(null);
                             if (next_token.kind == .dot) {
-                                return self.processUnionWithDot(T, dest, field.type, field.name, object_info);
+                                return self.parseUnionTagKey(T, dest, field.type, field.name, expected_closing_token, object_info);
                             } else {
                                 self.ungetToken();
                             }
@@ -594,19 +604,19 @@ fn Parser(comptime DateTimeParser: type) type {
                     }
 
                     const obj_info = try object_info.markAsObject(field.name);
-                    return self.parseAfterKey(field.type, &@field(dest, field.name), expected_token, obj_info);
+                    return self.parseAfterKey(field.type, &@field(dest, field.name), expected_closing_token, obj_info);
                 }
             }
 
             return error.UnexpectedToken;
         }
 
-        fn parseAfterKey(self: *Self, comptime T: type, dest: *T, expected_token: TokenKind, object_info: *ObjectInfo) Error!void {
+        fn parseAfterKey(self: *Self, comptime T: type, dest: *T, expected_closing_token: TokenKind, object_info: *ObjectInfo) Error!void {
             const token = try self.nextToken(null);
             if (token.kind == .dot) {
-                try self.parseAfterDot(T, dest, expected_token, object_info);
+                try self.parseAfterDot(T, dest, expected_closing_token, object_info);
             } else {
-                if (token.kind != expected_token) return error.UnexpectedToken;
+                if (token.kind != expected_closing_token) return error.UnexpectedToken;
                 if (token.kind == .equal) {
                     dest.* = try self.parseValue(T, object_info);
                 } else {
@@ -615,14 +625,14 @@ fn Parser(comptime DateTimeParser: type) type {
             }
         }
 
-        fn parseAfterDot(self: *Self, comptime T: type, dest: *T, expected_token: TokenKind, object_info: *ObjectInfo) Error!void {
+        fn parseAfterDot(self: *Self, comptime T: type, dest: *T, expected_closing_token: TokenKind, object_info: *ObjectInfo) Error!void {
             const token = try self.nextToken(null);
             if (token.kind != .bare_key and token.kind != .string) return error.UnexpectedToken;
 
             const ti = @typeInfo(T);
             if (ti != .@"struct") return error.UnexpectedToken;
 
-            try self.parseKey(T, dest, token.content, expected_token, object_info);
+            try self.parseKey(T, dest, token.content, expected_closing_token, object_info);
         }
     };
 }
