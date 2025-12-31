@@ -99,17 +99,21 @@ pub fn Parser(comptime Target: type) type {
         }
 
         pub fn parseFile(self: *Self, filename: []const u8) !Parsed(Target) {
-            const file = try std.fs.cwd().openFile(filename, .{});
-            defer file.close();
+            var threaded = std.Io.Threaded.init(self.alloc, .{});
+            const io = threaded.io();
+            defer threaded.deinit();
 
-            const size = try file.getEndPos();
+            const file = try std.Io.Dir.cwd().openFile(io, filename, .{});
+            defer file.close(io);
+
+            const stat = try file.stat(io);
+            const size = stat.size;
             const content = try self.alloc.alloc(u8, size);
             defer self.alloc.free(content);
 
             var buf: [4096]u8 = undefined;
             var w = std.Io.Writer.fixed(content);
-            var io = std.Io.Threaded.init_single_threaded;
-            var r = file.reader(io.ioBasic(), &buf);
+            var r = file.reader(io, &buf);
             _ = try w.sendFileAll(&r, .limited(size));
             try w.flush();
 
