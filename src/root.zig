@@ -98,11 +98,7 @@ pub fn Parser(comptime Target: type) type {
             }
         }
 
-        pub fn parseFile(self: *Self, filename: []const u8) !Parsed(Target) {
-            var threaded = std.Io.Threaded.init(self.alloc, .{});
-            const io = threaded.io();
-            defer threaded.deinit();
-
+        pub fn parseFile(self: *Self, io: std.Io, filename: []const u8) !Parsed(Target) {
             const file = try std.Io.Dir.cwd().openFile(io, filename, .{});
             defer file.close(io);
 

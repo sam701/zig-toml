@@ -1,9 +1,6 @@
 const std = @import("std");
 const toml = @import("toml");
 
-var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-const allocator = gpa.allocator();
-
 const Address = struct {
     port: i64,
     host: []const u8,
@@ -18,11 +15,11 @@ const Config = struct {
     peers: []const Address,
 };
 
-pub fn main() anyerror!void {
-    var parser = toml.Parser(Config).init(allocator);
+pub fn main(init: std.process.Init) anyerror!void {
+    var parser = toml.Parser(Config).init(init.gpa);
     defer parser.deinit();
 
-    var result = try parser.parseFile("./examples/example1.toml");
+    var result = try parser.parseFile(init.io, "./examples/example1.toml");
     defer result.deinit();
 
     const config = result.value;

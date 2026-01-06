@@ -94,7 +94,7 @@ test "parse into struct" {
     var p = main.Parser(Aa).init(testing.allocator);
     defer p.deinit();
 
-    const parsed = try p.parseFile("./test/doc1.toml.txt");
+    const parsed = try p.parseFile(std.testing.io, "./test/doc1.toml.txt");
     const aa: Aa = parsed.value;
     defer parsed.deinit();
 
@@ -199,7 +199,7 @@ test "deinit table" {
     var p = main.Parser(main.Table).init(testing.allocator);
     defer p.deinit();
 
-    const parsed = try p.parseFile("./test/doc1.toml.txt");
+    const parsed = try p.parseFile(std.testing.io, "./test/doc1.toml.txt");
     _ = parsed.value;
     defer parsed.deinit();
 }
