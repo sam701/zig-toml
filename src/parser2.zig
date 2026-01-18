@@ -6,6 +6,7 @@ const Reader = std.Io.Reader;
 const Allocator = std.mem.Allocator;
 const ArenaAllocator = std.heap.ArenaAllocator;
 const SourceLocation = @import("./scanner/source.zig").SourceLocation;
+const allocation = @import("./allocation.zig");
 
 pub const Parsed = std.json.Parsed;
 pub const Error = Scanner.Error || std.fmt.ParseIntError || std.fmt.ParseFloatError || std.mem.Allocator.Error || error{
@@ -59,119 +60,6 @@ pub fn parseWith(comptime T: type, reader: *Reader, alloc: Allocator, comptime D
     };
 }
 
-/// Tagged union representing a field that can be either an object (inline table) or an array of objects.
-const AllocatedStructField = union(enum) {
-    /// Field contains a nested struct/inline table.
-    object: StructField,
-    /// Field contains an array of struct/inline table objects.
-    array: ArrayField,
-
-    fn deinit(self: *AllocatedStructField) void {
-        switch (self.*) {
-            inline else => |*x| x.deinit(),
-        }
-    }
-};
-
-/// Represents an array of objects during parsing.
-/// Holds intermediate allocated structs and a reference to the final typed array list.
-const ArrayField = struct {
-    /// Allocator for creating objects.
-    alloc: Allocator,
-    /// Intermediate list of allocated struct fields being parsed.
-    objects: std.ArrayList(AllocatedStructField),
-    /// Opaque pointer to the final typed array list (e.g., ArrayList(T)).
-    field_values_array_list: *anyopaque,
-
-    fn init(alloc: Allocator, real_values_ptr: *anyopaque) ArrayField {
-        return .{
-            .objects = std.ArrayList(AllocatedStructField).empty,
-            .alloc = alloc,
-            .field_values_array_list = real_values_ptr,
-        };
-    }
-
-    fn deinit(self: *ArrayField) void {
-        for (self.objects.items) |*obj| {
-            obj.deinit();
-        }
-        self.objects.deinit(self.alloc);
-    }
-};
-
-/// Represents a struct/inline table during parsing.
-/// Maps field names to their allocated values (either nested structs or arrays).
-const StructField = struct {
-    /// Maps field names to their corresponding allocated values.
-    fields: std.StringHashMap(AllocatedStructField),
-
-    fn init(alloc: Allocator) StructField {
-        return .{ .fields = std.StringHashMap(AllocatedStructField).init(alloc) };
-    }
-
-    fn deinit(self: *StructField) void {
-        var it = self.fields.valueIterator();
-        while (it.next()) |v| v.deinit();
-
-        self.fields.deinit();
-    }
-
-    fn markAsObject(self: *StructField, field_name: []const u8) error{OutOfMemory}!*StructField {
-        const result = try self.fields.getOrPut(field_name);
-        if (!result.found_existing) {
-            result.value_ptr.* = AllocatedStructField{ .object = StructField.init(self.fields.allocator) };
-        }
-
-        return &result.value_ptr.object;
-    }
-
-    fn markAsArray(self: *StructField, field_name: []const u8) error{OutOfMemory}!*ArrayField {
-        const result = try self.fields.getOrPut(field_name);
-        if (!result.found_existing) {
-            result.value_ptr.* = AllocatedStructField{ .array = ArrayField.init(self.fields.allocator) };
-        }
-
-        return &result.value_ptr.array;
-    }
-};
-
-const SliceFinalizer = struct {
-    finalize_fn: *const fn (ctx: *anyopaque, Allocator) void,
-    context: *anyopaque,
-
-    fn init(
-        comptime T: type,
-        comptime FieldType: type,
-        comptime field_name: []const u8,
-        dest: *T,
-        array_list_ptr: *anyopaque,
-        allocator: Allocator,
-    ) error{OutOfMemory}!SliceFinalizer {
-        const FieldValueArrayList = std.ArrayList(FieldType);
-
-        const FinalizerCtx = struct {
-            array_list: *FieldValueArrayList,
-            dest: *T,
-
-            fn finalize(ctx: *anyopaque, alloc: Allocator) void {
-                const self_ctx: *@This() = @ptrCast(@alignCast(ctx));
-                @field(self_ctx.dest, field_name) = self_ctx.array_list.toOwnedSlice(alloc) catch unreachable;
-            }
-        };
-
-        const finalizer_ctx = try allocator.create(FinalizerCtx);
-        finalizer_ctx.* = .{
-            .array_list = @ptrCast(@alignCast(array_list_ptr)),
-            .dest = dest,
-        };
-
-        return .{
-            .finalize_fn = FinalizerCtx.finalize,
-            .context = @ptrCast(finalizer_ctx),
-        };
-    }
-};
-
 fn Parser(comptime DateTimeParser: type) type {
     return struct {
         arena: *ArenaAllocator,
@@ -179,8 +67,8 @@ fn Parser(comptime DateTimeParser: type) type {
         token_location: ?SourceLocation = null,
         current_token: ?Token = null,
         advance: bool = true,
-        top_level_object: StructField,
-        slice_finalizers: std.ArrayList(SliceFinalizer) = .empty,
+        top_level_object: allocation.StructField,
+        slice_finalizers: std.ArrayList(allocation.SliceFinalizer) = .empty,
 
         const Self = @This();
 
@@ -190,7 +78,7 @@ fn Parser(comptime DateTimeParser: type) type {
             return .{
                 .arena = arena,
                 .scanner = try Scanner.init(reader, alloc),
-                .top_level_object = StructField.init(alloc),
+                .top_level_object = allocation.StructField.init(alloc),
             };
         }
 
@@ -251,7 +139,7 @@ fn Parser(comptime DateTimeParser: type) type {
             return result;
         }
 
-        fn parseTableHeader(self: *Self, comptime T: type, dest: *T, expected_closing_token: TokenKind, object_info: *StructField) Error!void {
+        fn parseTableHeader(self: *Self, comptime T: type, dest: *T, expected_closing_token: TokenKind, object_info: *allocation.StructField) Error!void {
             const token = try self.nextToken(null);
             switch (token.kind) {
                 .bare_key, .string => {
@@ -261,7 +149,7 @@ fn Parser(comptime DateTimeParser: type) type {
             }
         }
 
-        fn parseTableContent(self: *Self, comptime T: type, dest: *T, object_info: *StructField) Error!void {
+        fn parseTableContent(self: *Self, comptime T: type, dest: *T, object_info: *allocation.StructField) Error!void {
             const ti = @typeInfo(T);
             if (ti != .@"struct") return error.NotStruct;
 
@@ -296,7 +184,7 @@ fn Parser(comptime DateTimeParser: type) type {
             return error.InvalidValueType;
         }
 
-        fn parseValue(self: *Self, comptime T: type, object_info: *StructField) Error!T {
+        fn parseValue(self: *Self, comptime T: type, object_info: *allocation.StructField) Error!T {
             const ti = @typeInfo(T);
 
             const token = try self.nextToken(.expect_value);
@@ -391,7 +279,7 @@ fn Parser(comptime DateTimeParser: type) type {
             unreachable;
         }
 
-        fn parseInnerTable(self: *Self, comptime T: type, object_info: *StructField) Error!T {
+        fn parseInnerTable(self: *Self, comptime T: type, object_info: *allocation.StructField) Error!T {
             const ti = @typeInfo(T);
             if (ti != .@"struct") return error.NotStruct;
 
@@ -421,7 +309,7 @@ fn Parser(comptime DateTimeParser: type) type {
             return result;
         }
 
-        fn parseArrayValue(self: *Self, comptime T: type, object_info: *StructField) Error![]T {
+        fn parseArrayValue(self: *Self, comptime T: type, object_info: *allocation.StructField) Error![]T {
             var ar = std.ArrayList(T).empty;
             while (true) {
                 try self.skipLineBreaks(.expect_value);
@@ -451,29 +339,29 @@ fn Parser(comptime DateTimeParser: type) type {
             }
         }
 
-        fn processPointerToOne(self: *Self, comptime T: type, dest: *T, comptime FieldType: type, comptime field_name: []const u8, expected_closing_token: TokenKind, object_info: *StructField) Error!void {
+        fn processPointerToOne(self: *Self, comptime T: type, dest: *T, comptime FieldType: type, comptime field_name: []const u8, expected_closing_token: TokenKind, object_info: *allocation.StructField) Error!void {
             const result = try object_info.fields.getOrPut(field_name);
             if (!result.found_existing) {
                 std.debug.print("== initializing .one {s}\n", .{field_name});
                 @field(dest, field_name) = try self.arena.allocator().create(FieldType);
 
-                result.value_ptr.* = AllocatedStructField{ .object = StructField.init(self.arena.allocator()) };
+                result.value_ptr.* = allocation.AllocatedStructField{ .object = allocation.StructField.init(self.arena.allocator()) };
             }
 
             try self.parseAfterKey(FieldType, @field(dest, field_name), expected_closing_token, &result.value_ptr.object);
         }
 
-        fn processPointerToMany(self: *Self, comptime T: type, dest: *T, comptime FieldType: type, comptime field_name: []const u8, expected_closing_token: TokenKind, object_info: *StructField) Error!void {
+        fn processPointerToMany(self: *Self, comptime T: type, dest: *T, comptime FieldType: type, comptime field_name: []const u8, expected_closing_token: TokenKind, object_info: *allocation.StructField) Error!void {
             const FieldValueArrayList = std.ArrayList(FieldType);
             const result = try object_info.fields.getOrPut(field_name);
             if (!result.found_existing) {
                 const list = try self.arena.allocator().create(FieldValueArrayList);
                 list.* = .{};
 
-                result.value_ptr.* = AllocatedStructField{ .array = ArrayField.init(self.arena.allocator(), @ptrCast(list)) };
+                result.value_ptr.* = allocation.AllocatedStructField{ .array = allocation.ArrayField.init(self.arena.allocator(), @ptrCast(list)) };
 
                 // Register finalizer to set dest field to toOwnedSlice
-                const finalizer = try SliceFinalizer.init(
+                const finalizer = try allocation.SliceFinalizer.init(
                     T,
                     FieldType,
                     field_name,
@@ -488,7 +376,7 @@ fn Parser(comptime DateTimeParser: type) type {
             var ar: *FieldValueArrayList = @ptrCast(@alignCast(result.value_ptr.array.field_values_array_list));
             const value_ptr = try ar.addOne(self.arena.allocator());
 
-            try result.value_ptr.array.objects.append(self.arena.allocator(), AllocatedStructField{ .object = StructField.init(self.arena.allocator()) });
+            try result.value_ptr.array.objects.append(self.arena.allocator(), allocation.AllocatedStructField{ .object = allocation.StructField.init(self.arena.allocator()) });
 
             try self.parseAfterKey(FieldType, value_ptr, expected_closing_token, &result.value_ptr.array.objects.items[result.value_ptr.array.objects.items.len - 1].object);
         }
@@ -501,7 +389,7 @@ fn Parser(comptime DateTimeParser: type) type {
             return tt.kind;
         }
 
-        fn parseUnionValue(self: *Self, comptime T: type, token: Token, object_info: *StructField) Error!T {
+        fn parseUnionValue(self: *Self, comptime T: type, token: Token, object_info: *allocation.StructField) Error!T {
             const union_info = @typeInfo(T).@"union";
 
             switch (token.kind) {
@@ -546,7 +434,7 @@ fn Parser(comptime DateTimeParser: type) type {
             comptime UnionType: type,
             comptime field_name: []const u8,
             expected_closing_token: TokenKind,
-            object_info: *StructField,
+            object_info: *allocation.StructField,
         ) Error!void {
             const union_info = @typeInfo(UnionType).@"union";
 
@@ -580,7 +468,7 @@ fn Parser(comptime DateTimeParser: type) type {
             return error.UnexpectedToken;
         }
 
-        fn parseKey(self: *Self, comptime T: type, dest: *T, key: []const u8, expected_closing_token: TokenKind, object_info: *StructField) Error!void {
+        fn parseKey(self: *Self, comptime T: type, dest: *T, key: []const u8, expected_closing_token: TokenKind, object_info: *allocation.StructField) Error!void {
             const dest_type_info = @typeInfo(T);
 
             inline for (dest_type_info.@"struct".fields) |field| {
@@ -622,7 +510,7 @@ fn Parser(comptime DateTimeParser: type) type {
             return error.UnexpectedToken;
         }
 
-        fn parseAfterKey(self: *Self, comptime T: type, dest: *T, expected_closing_token: TokenKind, object_info: *StructField) Error!void {
+        fn parseAfterKey(self: *Self, comptime T: type, dest: *T, expected_closing_token: TokenKind, object_info: *allocation.StructField) Error!void {
             const token = try self.nextToken(null);
             if (token.kind == .dot) {
                 try self.parseAfterDot(T, dest, expected_closing_token, object_info);
@@ -636,7 +524,7 @@ fn Parser(comptime DateTimeParser: type) type {
             }
         }
 
-        fn parseAfterDot(self: *Self, comptime T: type, dest: *T, expected_closing_token: TokenKind, object_info: *StructField) Error!void {
+        fn parseAfterDot(self: *Self, comptime T: type, dest: *T, expected_closing_token: TokenKind, object_info: *allocation.StructField) Error!void {
             const token = try self.nextToken(null);
             if (token.kind != .bare_key and token.kind != .string) return error.UnexpectedToken;
 
