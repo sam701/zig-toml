@@ -176,6 +176,27 @@ fn Parser(comptime DateTypes: type) type {
             const token = try self.nextToken(.expect_value);
             std.debug.print("parseValue kind = {}, context = {s} loc = {any}\n", .{ token.kind, token.content, token.location });
 
+            const Value = value.Value(DateTypes);
+
+            if (T == Value) {
+                self.ungetToken();
+                switch (token.kind) {
+                    .string, .string_multiline => return Value{ .string = try self.parseValue([]const u8, object_info) },
+                    .number => return Value{ .number = try self.parseValue(f64, object_info) },
+                    .true, .false => return Value{ .boolean = try self.parseValue(bool, object_info) },
+
+                    .left_bracket => return Value{ .array = try self.parseValue([]const Value, object_info) },
+                    // .left_brace => return Value{ .array = try self.parseValue(std.StringHashMap(Value), object_info) },
+
+                    .date => return Value{ .date = try self.parseValue(DateTypes.Date, object_info) },
+                    .time => return Value{ .time = try self.parseValue(DateTypes.Time, object_info) },
+                    .datetime => return Value{ .datetime = try self.parseValue(DateTypes.DateTime, object_info) },
+                    .datetime_local => return Value{ .datetime_local = try self.parseValue(DateTypes.DateTimeLocal, object_info) },
+
+                    else => return error.UnexpectedToken,
+                }
+            }
+
             switch (token.kind) {
                 .date => return self.parseDatetime(T, DateTypes.parseDate, token.content),
                 .datetime => return self.parseDatetime(T, DateTypes.parseDatetime, token.content),

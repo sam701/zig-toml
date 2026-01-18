@@ -1,8 +1,6 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 
-pub const ValueList = std.ArrayListUnmanaged(Value);
-
 pub const Error = Allocator.Error || error{InvalidDateTime};
 
 pub const DefaultDateTypes = struct {
@@ -28,15 +26,14 @@ pub const DefaultDateTypes = struct {
 pub fn Value(comptime DateTypes: type) type {
     return union(enum) {
         string: []const u8,
-        integer: i64,
-        float: f64,
+        number: f64,
         boolean: bool,
         date: DateTypes.Date,
         time: DateTypes.Time,
         datetime: DateTypes.DateTime,
         datetime_local: DateTypes.DateTimeLocal,
 
-        array: []const Value,
-        table: std.StringHashMap(Value),
+        array: []const Value(DateTypes),
+        table: std.StringHashMap(Value(DateTypes)),
     };
 }

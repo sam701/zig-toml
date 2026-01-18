@@ -3,6 +3,8 @@ const expect = std.testing.expect;
 const expectEqual = std.testing.expectEqual;
 const expectEqualStrings = std.testing.expectEqualStrings;
 const expectEqualSlices = std.testing.expectEqualSlices;
+const value = @import("./value2.zig");
+const Value = value.Value(value.DefaultDateTypes);
 
 const parse = @import("./parser2.zig").parse;
 
@@ -42,6 +44,7 @@ const MainStruct = struct {
     u4: U1,
     u5: U1,
     u6: U1,
+    values: []const Value,
 };
 const E1 = enum { value1, value2, v3, v4, v5 };
 const U1 = union(E1) {
@@ -79,6 +82,7 @@ test "full" {
         \\ 'st2' = { i1 = 3, b1 = true }
         \\
         \\ st3."b1" = true
+        \\ values = [3, "hello", [4], true ]
 
         // FIXME: no chained keys in inline tables
         \\ st4 = { st1.i1 = 3, st1.b1 = true}
@@ -167,4 +171,9 @@ test "full" {
     try expectEqual(2, result.value.ta1.len);
     try expectEqual(Struct1{ .i1 = 7, .b1 = true }, result.value.ta1[0]);
     try expectEqual(Struct1{ .i1 = 8, .b1 = false }, result.value.ta1[1]);
+
+    try expectEqual(3.0, result.value.values[0].number);
+    try expectEqualStrings("hello", result.value.values[1].string);
+    try expectEqual(4.0, result.value.values[2].array[0].number);
+    try expectEqual(true, result.value.values[3].boolean);
 }
