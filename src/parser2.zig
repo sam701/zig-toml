@@ -7,27 +7,13 @@ const Allocator = std.mem.Allocator;
 const ArenaAllocator = std.heap.ArenaAllocator;
 const SourceLocation = @import("./scanner/source.zig").SourceLocation;
 const allocation = @import("./allocation.zig");
+const value = @import("./value2.zig");
 
 pub const Parsed = std.json.Parsed;
-pub const Error = Scanner.Error || std.fmt.ParseIntError || std.fmt.ParseFloatError || std.mem.Allocator.Error || error{
+pub const Error = Scanner.Error || std.fmt.ParseIntError || std.fmt.ParseFloatError || std.mem.Allocator.Error || value.Error || error{
     UnexpectedToken,
     NotStruct,
     InvalidValueType,
-};
-
-const NoOpDateTimeParser = struct {
-    pub fn parseDate(str: []const u8, alloc: Allocator) Error![]const u8 {
-        return alloc.dupe(u8, str);
-    }
-    pub fn parseDatetime(str: []const u8, alloc: Allocator) Error![]const u8 {
-        return alloc.dupe(u8, str);
-    }
-    pub fn parseDatetimeLocal(str: []const u8, alloc: Allocator) Error![]const u8 {
-        return alloc.dupe(u8, str);
-    }
-    pub fn parseTime(str: []const u8, alloc: Allocator) Error![]const u8 {
-        return alloc.dupe(u8, str);
-    }
 };
 
 // TODO: add options that can specify
@@ -39,20 +25,20 @@ const NoOpDateTimeParser = struct {
 /// Parse TOML from a reader into type T.
 /// Datetime values (date, datetime, datetime-local, time) are returned as strings.
 pub fn parse(comptime T: type, reader: *Reader, alloc: Allocator) Error!Parsed(T) {
-    return parseWith(T, reader, alloc, NoOpDateTimeParser);
+    return parseWith(T, reader, alloc, value.DefaultDateTypes);
 }
 
 /// Parse TOML from a reader into type T with a custom datetime parser.
 ///
-/// The DatetimeParser type must provide the following functions:
+/// The DateTypes type must provide the following functions:
 /// - `parseDate(str: []const u8, alloc: Allocator) Error!TargetType`
 /// - `parseDatetime(str: []const u8, alloc: Allocator) Error!TargetType`
 /// - `parseDatetimeLocal(str: []const u8, alloc: Allocator) Error!TargetType`
 /// - `parseTime(str: []const u8, alloc: Allocator) Error!TargetType`
 ///
 /// Each function's return type (the error union payload) must match the target field type in T.
-pub fn parseWith(comptime T: type, reader: *Reader, alloc: Allocator, comptime DatetimeParser: type) Error!Parsed(T) {
-    var p = try Parser(DatetimeParser).init(reader, alloc);
+pub fn parseWith(comptime T: type, reader: *Reader, alloc: Allocator, comptime DateTypes: type) Error!Parsed(T) {
+    var p = try Parser(DateTypes).init(reader, alloc);
     defer p.deinit();
     return Parsed(T){
         .arena = p.arena,
@@ -60,7 +46,7 @@ pub fn parseWith(comptime T: type, reader: *Reader, alloc: Allocator, comptime D
     };
 }
 
-fn Parser(comptime DateTimeParser: type) type {
+fn Parser(comptime DateTypes: type) type {
     return struct {
         arena: *ArenaAllocator,
         scanner: Scanner,
@@ -191,10 +177,10 @@ fn Parser(comptime DateTimeParser: type) type {
             std.debug.print("parseValue kind = {}, context = {s} loc = {any}\n", .{ token.kind, token.content, token.location });
 
             switch (token.kind) {
-                .date => return self.parseDatetime(T, DateTimeParser.parseDate, token.content),
-                .datetime => return self.parseDatetime(T, DateTimeParser.parseDatetime, token.content),
-                .datetime_local => return self.parseDatetime(T, DateTimeParser.parseDatetimeLocal, token.content),
-                .time => return self.parseDatetime(T, DateTimeParser.parseTime, token.content),
+                .date => return self.parseDatetime(T, DateTypes.parseDate, token.content),
+                .datetime => return self.parseDatetime(T, DateTypes.parseDatetime, token.content),
+                .datetime_local => return self.parseDatetime(T, DateTypes.parseDatetimeLocal, token.content),
+                .time => return self.parseDatetime(T, DateTypes.parseTime, token.content),
                 else => {},
             }
 
@@ -413,12 +399,12 @@ fn Parser(comptime DateTimeParser: type) type {
                             const eq_token = try self.nextToken(null);
                             if (eq_token.kind != .equal) return error.UnexpectedToken;
 
-                            const value = try self.parseValue(field.type, object_info);
+                            const val = try self.parseValue(field.type, object_info);
 
                             const close_token = try self.nextToken(null);
                             if (close_token.kind != .right_brace) return error.UnexpectedToken;
 
-                            return @unionInit(T, field.name, value);
+                            return @unionInit(T, field.name, val);
                         }
                     }
                 },
