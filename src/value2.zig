@@ -34,6 +34,6 @@ pub fn Value(comptime DateTypes: type) type {
         datetime_local: DateTypes.DateTimeLocal,
 
         array: []const Value(DateTypes),
-        table: std.StringHashMap(Value(DateTypes)),
+        table: std.StringHashMapUnmanaged(Value(DateTypes)),
     };
 }
