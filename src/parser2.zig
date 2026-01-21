@@ -144,7 +144,7 @@ fn Parser(comptime DateTypes: type) type {
 
                 switch (token.kind) {
                     .bare_key, .string => {
-                        try self.parseKey(T, &result, token.content, .equal, &self.top_level_object);
+                        try self.processKey(T, &result, token.content, .equal, &self.top_level_object);
                     },
                     .left_bracket => try self.parseTableHeader(T, &result, .right_bracket, &self.top_level_object),
                     .double_left_bracket => try self.parseTableHeader(T, &result, .double_right_bracket, &self.top_level_object),
@@ -166,7 +166,7 @@ fn Parser(comptime DateTypes: type) type {
             const token = try self.nextToken(null);
             switch (token.kind) {
                 .bare_key, .string => {
-                    try self.parseKey(T, dest, token.content, expected_closing_token, object_info);
+                    try self.processKey(T, dest, token.content, expected_closing_token, object_info);
                 },
                 else => return error.UnexpectedToken,
             }
@@ -180,7 +180,7 @@ fn Parser(comptime DateTypes: type) type {
                 const token = try self.nextToken(.top_level);
 
                 switch (token.kind) {
-                    .bare_key, .string => try self.parseKey(T, dest, token.content, .equal, object_info),
+                    .bare_key, .string => try self.processKey(T, dest, token.content, .equal, object_info),
                     .left_bracket, .double_left_bracket, .end_of_document => {
                         self.ungetToken();
                         break;
@@ -313,7 +313,7 @@ fn Parser(comptime DateTypes: type) type {
                         else => return error.InvalidValueType,
                     }
                 },
-                .@"union" => return self.parseUnionValue(ValueType, token, struct_allocation_info),
+                .@"union" => return self.processUnionValue(ValueType, token, struct_allocation_info),
 
                 else => {},
             }
@@ -327,8 +327,10 @@ fn Parser(comptime DateTypes: type) type {
 
             var result: InnerTableType = undefined;
 
-            // TODO: needs review
-            if (getHashMapInfo(InnerTableType) != null) result = .{};
+            if (getHashMapInfo(InnerTableType) != null) {
+                result = .{};
+                object_info.hashmap_initialized = true;
+            }
 
             var token = try self.nextToken(null);
             if (token.kind != .left_brace) return error.UnexpectedToken;
@@ -337,7 +339,7 @@ fn Parser(comptime DateTypes: type) type {
                 token = try self.nextToken(null);
                 switch (token.kind) {
                     .bare_key, .string => {
-                        try self.parseKey(InnerTableType, &result, token.content, .equal, object_info);
+                        try self.processKey(InnerTableType, &result, token.content, .equal, object_info);
                     },
                     else => return error.UnexpectedToken,
                 }
@@ -376,7 +378,7 @@ fn Parser(comptime DateTypes: type) type {
         fn processPointerToOne(
             self: *Self,
             comptime ObjectType: type,
-            dest: *ObjectType,
+            object: *ObjectType,
             comptime FieldType: type,
             comptime field_name: []const u8,
             expected_closing_token: TokenKind,
@@ -385,12 +387,12 @@ fn Parser(comptime DateTypes: type) type {
             const result = try object_info.fields.getOrPut(field_name);
             if (!result.found_existing) {
                 std.debug.print("== initializing .one {s}\n", .{field_name});
-                @field(dest, field_name) = try self.arena.allocator().create(FieldType);
+                @field(object, field_name) = try self.arena.allocator().create(FieldType);
 
                 result.value_ptr.* = allocation.AllocatedStructField{ .object = allocation.StructField.init(self.arena.allocator()) };
             }
 
-            try self.parseAfterKey(FieldType, @field(dest, field_name), expected_closing_token, &result.value_ptr.object);
+            try self.processAfterKey(FieldType, @field(object, field_name), expected_closing_token, &result.value_ptr.object);
         }
 
         fn processPointerToMany(
@@ -429,10 +431,10 @@ fn Parser(comptime DateTypes: type) type {
             // TODO: how do we know that it's AllocatedStructField? It can be another array.
             try result.value_ptr.array.objects.append(self.arena.allocator(), allocation.AllocatedStructField{ .object = allocation.StructField.init(self.arena.allocator()) });
 
-            try self.parseAfterKey(FieldType, value_ptr, expected_closing_token, &result.value_ptr.array.objects.items[result.value_ptr.array.objects.items.len - 1].object);
+            try self.processAfterKey(FieldType, value_ptr, expected_closing_token, &result.value_ptr.array.objects.items[result.value_ptr.array.objects.items.len - 1].object);
         }
 
-        fn parseUnionValue(
+        fn processUnionValue(
             self: *Self,
             comptime ObjectType: type,
             token: Token,
@@ -475,7 +477,7 @@ fn Parser(comptime DateTypes: type) type {
             return error.InvalidValueType;
         }
 
-        fn parseUnionTagKey(
+        fn processUnionTagKey(
             self: *Self,
             comptime ObjectType: type,
             dest: *ObjectType,
@@ -505,7 +507,7 @@ fn Parser(comptime DateTypes: type) type {
                     }
 
                     const obj_info = try object_info.markAsObject(field_name);
-                    return self.parseAfterKey(
+                    return self.processAfterKey(
                         union_field.type,
                         &@field(@field(dest, field_name), union_field.name),
                         expected_closing_token,
@@ -516,7 +518,7 @@ fn Parser(comptime DateTypes: type) type {
             return error.UnexpectedToken;
         }
 
-        fn parseKey(
+        fn processKey(
             self: *Self,
             comptime ObjectType: type,
             object: *ObjectType,
@@ -529,8 +531,13 @@ fn Parser(comptime DateTypes: type) type {
                 var val: ValueType = undefined;
                 const obj_info = try object_info.markAsObject(key);
                 const key_copy = try self.arena.allocator().dupe(u8, key);
-                try self.parseAfterKey(ValueType, &val, expected_closing_token, obj_info);
+                try self.processAfterKey(ValueType, &val, expected_closing_token, obj_info);
                 std.debug.print("== type = {s}, key = {s}, val = {any}\n", .{ @typeName(ValueType), key_copy, val });
+                if (!object_info.hashmap_initialized) {
+                    std.debug.print("== initializing\n", .{});
+                    object_info.hashmap_initialized = true;
+                    object.* = .{};
+                }
                 try object.put(self.arena.allocator(), key_copy, val);
 
                 return;
@@ -538,13 +545,13 @@ fn Parser(comptime DateTypes: type) type {
             const dest_type_info = @typeInfo(ObjectType);
             inline for (dest_type_info.@"struct".fields) |field| {
                 if (std.mem.eql(u8, field.name, key))
-                    return self.parseKeyMatchedField(ObjectType, object, field, expected_closing_token, object_info);
+                    return self.processKeyMatchedField(ObjectType, object, field, expected_closing_token, object_info);
             }
 
             return error.UnexpectedToken;
         }
 
-        fn parseKeyMatchedField(
+        fn processKeyMatchedField(
             self: *Self,
             comptime ObjectType: type,
             object: *ObjectType,
@@ -573,7 +580,7 @@ fn Parser(comptime DateTypes: type) type {
                 .@"union" => {
                     const next_token = try self.nextToken(null);
                     if (next_token.kind == .dot) {
-                        return self.parseUnionTagKey(ObjectType, object, field.type, field.name, expected_closing_token, alloc_info);
+                        return self.processUnionTagKey(ObjectType, object, field.type, field.name, expected_closing_token, alloc_info);
                     } else {
                         self.ungetToken();
                     }
@@ -582,10 +589,16 @@ fn Parser(comptime DateTypes: type) type {
             }
 
             const obj_info = try alloc_info.markAsObject(field.name);
-            return self.parseAfterKey(field.type, &@field(object, field.name), expected_closing_token, obj_info);
+            return self.processAfterKey(field.type, &@field(object, field.name), expected_closing_token, obj_info);
         }
 
-        fn parseAfterKey(self: *Self, comptime ValueType: type, value_ptr: *ValueType, expected_closing_token: TokenKind, object_info: *allocation.StructField) Error!void {
+        fn processAfterKey(
+            self: *Self,
+            comptime ValueType: type,
+            value_ptr: *ValueType,
+            expected_closing_token: TokenKind,
+            object_info: *allocation.StructField,
+        ) Error!void {
             const token = try self.nextToken(null);
             if (token.kind == .dot) {
                 const after_dot_token = try self.nextToken(null);
@@ -594,7 +607,7 @@ fn Parser(comptime DateTypes: type) type {
                 const ti = @typeInfo(ValueType);
                 if (ti != .@"struct") return error.UnexpectedToken;
 
-                try self.parseKey(ValueType, value_ptr, after_dot_token.content, expected_closing_token, object_info);
+                try self.processKey(ValueType, value_ptr, after_dot_token.content, expected_closing_token, object_info);
             } else {
                 if (token.kind != expected_closing_token) return error.UnexpectedToken;
                 if (token.kind == .equal) {

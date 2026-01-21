@@ -47,6 +47,8 @@ pub const StructField = struct {
     /// Maps field names to their corresponding allocated values.
     fields: std.StringHashMap(AllocatedStructField),
 
+    hashmap_initialized: bool = false,
+
     pub fn init(alloc: Allocator) StructField {
         return .{ .fields = std.StringHashMap(AllocatedStructField).init(alloc) };
     }
