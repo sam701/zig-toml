@@ -17,7 +17,7 @@ const SerializerState = struct {
     fn init(allocator: Allocator) Self {
         return Self{
             .allocator = allocator,
-            .table_comp = .{},
+            .table_comp = .empty,
         };
     }
 
