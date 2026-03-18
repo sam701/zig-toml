@@ -1,0 +1,17 @@
+// Project tasks configuration. See https://zed.dev/docs/tasks for documentation.
+//
+// Example:
+[
+  {
+    "label": "Build",
+    "command": "zig build",
+  },
+  {
+    "label": "Test",
+    "command": "zig build test",
+  },
+  {
+    "label": "Test with pattern",
+    "command": "zig build test -Dtest-filter=full",
+  },
+]
