@@ -22,7 +22,7 @@ pub fn parseSingleLine(ctx: *Context) !?[]const u8 {
 }
 
 pub fn parseString(ctx: *Context, delimiter: *const Delimiter) !?[]const u8 {
-    var output: Buffer = .{};
+    var output: Buffer = .{ .items = &.{}, .capacity = 0 };
     errdefer output.deinit(ctx.alloc);
 
     while (ctx.current()) |c| {

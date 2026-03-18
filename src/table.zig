@@ -109,7 +109,7 @@ fn tableAdvance(ctx: *parser.Context, table: *Table, key: parser.String, new_arr
         if (new_array_item) {
             var list = try ctx.alloc.create(ValueList);
             errdefer ctx.alloc.destroy(list);
-            list.* = .{};
+            list.* = .{ .items = &.{}, .capacity = 0 };
             try list.append(ctx.alloc, new_value);
             new_value = Value{ .array = list };
         }

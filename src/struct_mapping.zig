@@ -13,7 +13,7 @@ pub const Context = struct {
     pub fn init(alloc: std.mem.Allocator) Context {
         return .{
             .alloc = alloc,
-            .field_path = .{},
+            .field_path = .{ .items = &.{}, .capacity = 0 },
         };
     }
 
