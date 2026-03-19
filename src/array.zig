@@ -13,7 +13,7 @@ pub fn parse(ctx: *parser.Context) !?*value.ValueList {
     var ar = try ctx.alloc.create(value.ValueList);
     errdefer ctx.alloc.destroy(ar);
 
-    ar.* = .{};
+    ar.* = .empty;
     errdefer ar.deinit(ctx.alloc);
 
     while (true) {
