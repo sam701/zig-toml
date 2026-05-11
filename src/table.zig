@@ -167,12 +167,12 @@ pub fn parseInlineTable(ctx: *parser.Context) !?*Table {
     errdefer deinitTableRecursively(table);
 
     while (true) {
-        spaces.skipSpaces(ctx);
+        spaces.skipSpacesAndLineBreaks(ctx);
         var pair = try kv.parse(ctx);
         errdefer pair.deinit(ctx.alloc);
 
         try handleKeyPair(ctx, table, &pair);
-        spaces.skipSpaces(ctx);
+        spaces.skipSpacesAndLineBreaks(ctx);
         parser.consumeString(ctx, ",") catch {
             try parser.consumeString(ctx, "}");
             break;
@@ -207,6 +207,21 @@ test "table content" {
 
 test "inline table" {
     var ctx = parser.testInput("{ aa = 3, bb.cc = 4 }");
+    var m = (try parseInlineTable(&ctx)).?;
+    try testing.expect(m.count() == 2);
+    try testing.expect(m.get("aa").?.integer == 3);
+    try testing.expect(m.get("bb").?.table.get("cc").?.integer == 4);
+    deinitTableRecursively(m);
+    testing.allocator.destroy(m);
+}
+
+test "multi-line inline table" {
+    var ctx = parser.testInput(
+        \\{
+        \\    aa = 3,
+        \\    bb.cc = 4
+        \\}
+    );
     var m = (try parseInlineTable(&ctx)).?;
     try testing.expect(m.count() == 2);
     try testing.expect(m.get("aa").?.integer == 3);
