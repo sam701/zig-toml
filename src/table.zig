@@ -177,6 +177,12 @@ pub fn parseInlineTable(ctx: *parser.Context) !?*Table {
             try parser.consumeString(ctx, "}");
             break;
         };
+
+        spaces.skipSpacesAndLineBreaks(ctx);
+        parser.consumeString(ctx, "}") catch {
+            continue;
+        };
+        break;
     }
 
     return table;
@@ -219,7 +225,7 @@ test "multi-line inline table" {
     var ctx = parser.testInput(
         \\{
         \\    aa = 3,
-        \\    bb.cc = 4
+        \\    bb.cc = 4,
         \\}
     );
     var m = (try parseInlineTable(&ctx)).?;
