@@ -408,7 +408,7 @@ fn Parser(comptime DateTypes: type) type {
             const result = try object_info.fields.getOrPut(field_name);
             if (!result.found_existing) {
                 const list = try self.arena.allocator().create(FieldValueArrayList);
-                list.* = .{};
+                list.* = FieldValueArrayList.empty;
 
                 result.value_ptr.* = allocation.AllocatedStructField{ .array = allocation.ArrayField.init(self.arena.allocator(), @ptrCast(list)) };
 
