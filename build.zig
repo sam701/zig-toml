@@ -10,13 +10,21 @@ pub fn build(b: *std.Build) void {
         .optimize = optimizeOpt,
     });
 
-    const main_tests = b.addTest(.{
-        .root_module = module,
-    });
+    // Tests
+    {
+        // Run with `zig build test -Dtest-filter hashmap`
+        const test_filter = b.option([]const []const u8, "test-filter", "Filter tests by name") orelse &.{};
 
-    const run_tests = b.addRunArtifact(main_tests);
-    const test_step = b.step("test", "Run library tests");
-    test_step.dependOn(&run_tests.step);
+        const main_tests = b.addTest(.{
+            .root_module = module,
+            .filters = test_filter,
+        });
+
+        const run_tests = b.addRunArtifact(main_tests);
+
+        const test_step = b.step("test", "Run library tests");
+        test_step.dependOn(&run_tests.step);
+    }
 
     // examples
     // {
