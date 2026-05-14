@@ -235,3 +235,20 @@ test "value hashmap - nested values" {
     try expectEqual(6.0, result.value.map.get("aa").?.table.get("dd").?.number);
     try expectEqual(5.0, result.value.map.get("bb").?.number);
 }
+
+test "value hashmap - nested key values" {
+    const St = struct { map: std.StringHashMapUnmanaged(Value) };
+    var reader = std.Io.Reader.fixed(
+        \\ [map.aa.b1]
+        \\ cc = 5
+        \\ [map.aa.b2]
+        \\ bb = 6
+    );
+    const result = try parse(St, &reader, std.testing.allocator);
+    defer result.deinit();
+
+    try expectEqual(1, result.value.map.size);
+    try expectEqual(2, result.value.map.get("aa").?.table.size);
+    try expectEqual(5.0, result.value.map.get("aa").?.table.get("b1").?.table.get("cc").?.number);
+    try expectEqual(6.0, result.value.map.get("aa").?.table.get("b2").?.table.get("bb").?.number);
+}

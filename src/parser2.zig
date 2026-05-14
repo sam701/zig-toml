@@ -625,6 +625,12 @@ fn Parser(comptime DateTypes: type) type {
                 if (token.kind != expected_closing_token) return error.UnexpectedToken;
                 if (token.kind == .equal) {
                     value_ptr.* = try self.parseValue(ValueType, object_info);
+                } else if (ValueType == TomlValue) {
+                    if (!object_info.hashmap_initialized) {
+                        object_info.hashmap_initialized = true;
+                        value_ptr.* = TomlValue{ .table = std.StringHashMapUnmanaged(TomlValue).empty };
+                    }
+                    try self.parseTableContent(std.StringHashMapUnmanaged(TomlValue), &value_ptr.table, object_info);
                 } else {
                     try self.parseTableContent(ValueType, value_ptr, object_info);
                 }
