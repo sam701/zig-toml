@@ -16,6 +16,8 @@ pub const Error = Scanner.Error || std.fmt.ParseIntError || std.fmt.ParseFloatEr
     InvalidValueType,
 };
 
+const debug = true;
+
 // TODO: add options that can specify
 // - how to treat missing fields,
 // - how to treat non-existing fields
@@ -98,14 +100,14 @@ fn Parser(comptime DateTypes: type) type {
             if (!self.advance) {
                 if (self.current_token) |ct| {
                     self.advance = true;
-                    std.debug.print("token={any} (no advance) {s}\n", .{ ct.kind, ct.content });
+                    if (debug) std.debug.print("token={any} (no advance) {s}\n", .{ ct.kind, ct.content });
                     return ct;
                 }
             }
             const t = try self.scanner.next(hint);
             self.current_token = t;
             self.token_location = t.location;
-            std.debug.print("token={any} {s}\n", .{ t.kind, t.content });
+            if (debug) std.debug.print("token={any} {s}\n", .{ t.kind, t.content });
             return t;
         }
 
@@ -117,7 +119,7 @@ fn Parser(comptime DateTypes: type) type {
         fn peekNextTokenKind(self: *Self, expected_closing_token: TokenKind) Error!TokenKind {
             const hint: ?Scanner.Hint = if (expected_closing_token == .double_right_bracket) .after_double_bracket else null;
             const tt = try self.nextToken(hint);
-            std.debug.print("// tt = {any}, expected={any}\n", .{ tt.kind, expected_closing_token });
+            if (debug) std.debug.print("// tt = {any}, expected={any}\n", .{ tt.kind, expected_closing_token });
             self.ungetToken();
             return tt.kind;
         }
@@ -214,7 +216,7 @@ fn Parser(comptime DateTypes: type) type {
             const ti = @typeInfo(ValueType);
 
             const token = try self.nextToken(.expect_value);
-            std.debug.print("parseValue kind = {}, context = {s} loc = {any}\n", .{ token.kind, token.content, token.location });
+            if (debug) std.debug.print("parseValue kind = {}, context = {s} loc = {any}\n", .{ token.kind, token.content, token.location });
 
             if (ValueType == TomlValue) {
                 self.ungetToken();
@@ -389,7 +391,7 @@ fn Parser(comptime DateTypes: type) type {
         ) Error!void {
             const result = try object_info.fields.getOrPut(field_name);
             if (!result.found_existing) {
-                std.debug.print("== initializing .one {s}\n", .{field_name});
+                if (debug) std.debug.print("== initializing .one {s}\n", .{field_name});
                 @field(object, field_name) = try self.arena.allocator().create(FieldType);
 
                 result.value_ptr.* = allocation.AllocatedStructField{ .object = allocation.StructField.init(self.arena.allocator()) };
@@ -538,9 +540,9 @@ fn Parser(comptime DateTypes: type) type {
                 const obj_info = try object_info.markAsObject(key);
                 const key_copy = try self.arena.allocator().dupe(u8, key);
                 try self.processAfterKey(ValueType, &val, expected_closing_token, obj_info);
-                std.debug.print("== type = {s}, key = {s}, val = {any}\n", .{ @typeName(ValueType), key_copy, val });
+                if (debug) std.debug.print("== type = {s}, key = {s}, val = {any}\n", .{ @typeName(ValueType), key_copy, val });
                 if (!object_info.hashmap_initialized) {
-                    std.debug.print("== initializing\n", .{});
+                    if (debug) std.debug.print("== initializing\n", .{});
                     object_info.hashmap_initialized = true;
                     object.* = .{};
                 }

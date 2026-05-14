@@ -251,3 +251,14 @@ test "value hashmap - nested key values" {
     try expectEqual(5.0, result.value.map.get("aa").?.table.get("b1").?.table.get("cc").?.number);
     try expectEqual(6.0, result.value.map.get("aa").?.table.get("b2").?.table.get("bb").?.number);
 }
+
+test "value in as struct" {
+    const St = struct { n1: Value };
+    var reader = std.Io.Reader.fixed(
+        \\ n1 = 5
+    );
+    const result = try parse(St, &reader, std.testing.allocator);
+    defer result.deinit();
+
+    try expectEqual(5.0, result.value.n1.number);
+}
