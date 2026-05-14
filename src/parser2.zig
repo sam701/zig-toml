@@ -51,6 +51,7 @@ const HashMapInfo = struct {
     value_type: ?type = null,
 };
 
+// Returns hashmap info if it's a hashmap type, otherwise returns null.
 fn getHashMapInfo(comptime T: type) ?type {
     if (!@hasDecl(T, "put")) return null;
     const put_fn_info = @typeInfo(@TypeOf(T.put)).@"fn";
@@ -529,6 +530,9 @@ fn Parser(comptime DateTypes: type) type {
             // Handle types with a put method (like StringHashMapUnmanaged)
             if (getHashMapInfo(ObjectType)) |ValueType| {
                 var val: ValueType = undefined;
+                if (object_info.hashmap_initialized) {
+                    if (object.get(key)) |existing| val = existing;
+                }
                 const obj_info = try object_info.markAsObject(key);
                 const key_copy = try self.arena.allocator().dupe(u8, key);
                 try self.processAfterKey(ValueType, &val, expected_closing_token, obj_info);
@@ -604,11 +608,20 @@ fn Parser(comptime DateTypes: type) type {
                 const after_dot_token = try self.nextToken(null);
                 if (after_dot_token.kind != .bare_key and after_dot_token.kind != .string) return error.UnexpectedToken;
 
-                const ti = @typeInfo(ValueType);
-                if (ti != .@"struct") return error.UnexpectedToken;
+                if (ValueType == TomlValue) {
+                    if (!object_info.hashmap_initialized) {
+                        object_info.hashmap_initialized = true;
+                        value_ptr.* = TomlValue{ .table = std.StringHashMapUnmanaged(TomlValue).empty };
+                    }
+                    try self.processKey(std.StringHashMapUnmanaged(TomlValue), &value_ptr.table, after_dot_token.content, expected_closing_token, object_info);
+                } else {
+                    const ti = @typeInfo(ValueType);
+                    if (ti != .@"struct") return error.UnexpectedToken;
 
-                try self.processKey(ValueType, value_ptr, after_dot_token.content, expected_closing_token, object_info);
+                    try self.processKey(ValueType, value_ptr, after_dot_token.content, expected_closing_token, object_info);
+                }
             } else {
+                // Assign value
                 if (token.kind != expected_closing_token) return error.UnexpectedToken;
                 if (token.kind == .equal) {
                     value_ptr.* = try self.parseValue(ValueType, object_info);
