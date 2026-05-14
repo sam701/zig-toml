@@ -132,34 +132,36 @@ fn Parser(comptime DateTypes: type) type {
             }
         }
 
-        fn parseTopLevelStruct(self: *Self, comptime T: type) Error!T {
-            const ti = @typeInfo(T);
-
-            // TODO: it can be a pointer to a struct.
-            if (ti != .@"struct") return error.NotStruct;
-
-            var result: T = undefined;
-
+        fn parseTopLevelInto(self: *Self, comptime ObjType: type, dest: *ObjType) Error!void {
             while (true) {
                 const token = try self.nextToken(.top_level);
-
                 switch (token.kind) {
-                    .bare_key, .string => {
-                        try self.processKey(T, &result, token.content, .equal, &self.top_level_object);
-                    },
-                    .left_bracket => try self.parseTableHeader(T, &result, .right_bracket, &self.top_level_object),
-                    .double_left_bracket => try self.parseTableHeader(T, &result, .double_right_bracket, &self.top_level_object),
+                    .bare_key, .string => try self.processKey(ObjType, dest, token.content, .equal, &self.top_level_object),
+                    .left_bracket => try self.parseTableHeader(ObjType, dest, .right_bracket, &self.top_level_object),
+                    .double_left_bracket => try self.parseTableHeader(ObjType, dest, .double_right_bracket, &self.top_level_object),
                     .line_break => {},
                     .end_of_document => break,
                     else => return error.UnexpectedToken,
                 }
             }
-
-            // Run all finalizers
             for (self.slice_finalizers.items) |finalizer| {
                 finalizer.finalize_fn(finalizer.context, self.arena.allocator());
             }
+        }
 
+        fn parseTopLevelStruct(self: *Self, comptime T: type) Error!T {
+            if (T == TomlValue) {
+                var table = std.StringHashMapUnmanaged(TomlValue){};
+                self.top_level_object.hashmap_initialized = true;
+                try self.parseTopLevelInto(std.StringHashMapUnmanaged(TomlValue), &table);
+                return TomlValue{ .table = table };
+            }
+
+            // TODO: it can be a pointer to a struct or a hashmap of Values.
+            if (@typeInfo(T) != .@"struct") return error.NotStruct;
+
+            var result: T = undefined;
+            try self.parseTopLevelInto(T, &result);
             return result;
         }
 

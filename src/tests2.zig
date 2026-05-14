@@ -204,18 +204,17 @@ test "int hashmap" {
 }
 
 test "value hashmap" {
-    const St = struct { map: std.StringHashMapUnmanaged(Value) };
     var reader = std.Io.Reader.fixed(
         \\ [map]
         \\ aa = 4
         \\ bb = 5
     );
-    const result = try parse(St, &reader, std.testing.allocator);
+    const result = try parse(Value, &reader, std.testing.allocator);
     defer result.deinit();
 
-    try expectEqual(2, result.value.map.size);
-    try expectEqual(4.0, result.value.map.get("aa").?.number);
-    try expectEqual(5.0, result.value.map.get("bb").?.number);
+    try expectEqual(2, result.value.table.get("map").?.table.size);
+    try expectEqual(4.0, result.value.table.get("map").?.table.get("aa").?.number);
+    try expectEqual(5.0, result.value.table.get("map").?.table.get("bb").?.number);
 }
 
 test "value hashmap - nested values" {
