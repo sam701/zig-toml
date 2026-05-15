@@ -71,6 +71,7 @@ fn parseEscaped(ctx: *Context, delimiter: *const Delimiter, output: *Buffer) !vo
         'U' => try parseUnicode(ctx, 8, output),
         'b' => try output.append(ctx.alloc, 0x08),
         'f' => try output.append(ctx.alloc, 0x0c),
+        'e' => try output.append(ctx.alloc, 0x1b),
         't' => try output.append(ctx.alloc, '\t'),
         'n' => try output.append(ctx.alloc, '\n'),
         'r' => try output.append(ctx.alloc, '\r'),
@@ -283,9 +284,9 @@ test "double escape" {
 }
 
 test "simple escape" {
-    var ctx = parser.testInput("\"\\b\\t\\r\\n\\fa\"");
+    var ctx = parser.testInput("\"\\b\\e\\t\\r\\n\\fa\"");
     const str = try parse(&ctx);
-    try testing.expect(std.mem.eql(u8, str.?, "\x08\t\r\n\x0ca"));
+    try testing.expect(std.mem.eql(u8, str.?, "\x08\x1b\t\r\n\x0ca"));
     try testing.expect(ctx.current() == null);
     ctx.alloc.free(str.?);
 }
