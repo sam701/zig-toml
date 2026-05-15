@@ -79,15 +79,27 @@ pub const StructField = struct {
     }
 };
 
+/// A type-erased deferred callback that converts an `ArrayList(FieldType)` into an
+/// owned slice and assigns it to a named field of a destination struct.
+///
+/// The parser accumulates TOML array-of-tables entries into typed `ArrayList`s but
+/// tracks them as `*anyopaque` for generality. `SliceFinalizer` captures the concrete
+/// type information at `init` time (via comptime parameters) and defers the
+/// `toOwnedSlice` + field assignment until parsing is complete, at which point the
+/// caller iterates all registered finalizers and calls `finalize_fn`.
 pub const SliceFinalizer = struct {
     finalize_fn: *const fn (ctx: *anyopaque, Allocator) void,
     context: *anyopaque,
 
+    /// Creates a finalizer that will call `toOwnedSlice` on `array_list_ptr` (cast to
+    /// `*ArrayList(FieldType)`) and store the result into `field_name` on `dest`.
+    /// The `FinalizerCtx` is heap-allocated via `allocator` and must outlive the call
+    /// to `finalize_fn`.
     pub fn init(
-        comptime T: type,
+        comptime ObjectType: type,
         comptime FieldType: type,
         comptime field_name: []const u8,
-        dest: *T,
+        dest: *ObjectType,
         array_list_ptr: *anyopaque,
         allocator: Allocator,
     ) error{OutOfMemory}!SliceFinalizer {
@@ -95,7 +107,7 @@ pub const SliceFinalizer = struct {
 
         const FinalizerCtx = struct {
             array_list: *FieldValueArrayList,
-            dest: *T,
+            dest: *ObjectType,
 
             fn finalize(ctx: *anyopaque, alloc: Allocator) void {
                 const self_ctx: *@This() = @ptrCast(@alignCast(ctx));

@@ -645,7 +645,9 @@ fn Parser(comptime DateTypes: type) type {
                 },
                 .double_right_bracket => {
                     if (ValueType == TomlValue) {
-                        // [[key]] array-of-tables: append a new table entry each time.
+                        // [[key]] array-of-tables: initialize on first encounter, then append a new table.
+                        // With TomlValue (dynamic), the field type is unknown until we see ]], so we
+                        // cannot initialize the array earlier during key traversal.
                         if (!object_info.hashmap_initialized) {
                             value_ptr.* = TomlValue{ .array = &.{} };
                             object_info.hashmap_initialized = true;
