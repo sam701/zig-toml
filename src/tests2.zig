@@ -262,3 +262,41 @@ test "value in as struct" {
 
     try expectEqual(5.0, result.value.n1.number);
 }
+
+test "value key array" {
+    const St = struct { map: Value };
+    var reader = std.Io.Reader.fixed(
+        \\ [[map.aa]]
+        \\ cc = 5
+        \\ [[map.aa]]
+        \\ cc = 6
+    );
+    const result = try parse(St, &reader, std.testing.allocator);
+    defer result.deinit();
+
+    try expectEqual(2, result.value.map.table.get("aa").?.array.len);
+    try expectEqual(5.0, result.value.map.table.get("aa").?.array[0].table.get("cc").?.number);
+    try expectEqual(6.0, result.value.map.table.get("aa").?.array[1].table.get("cc").?.number);
+}
+
+test "array table" {
+    const St = struct {
+        map: struct {
+            aa: []struct {
+                cc: i16,
+            },
+        },
+    };
+    var reader = std.Io.Reader.fixed(
+        \\ [[map.aa]]
+        \\ cc = 5
+        \\ [[map.aa]]
+        \\ cc = 6
+    );
+    const result = try parse(St, &reader, std.testing.allocator);
+    defer result.deinit();
+
+    try expectEqual(2, result.value.map.aa.len);
+    try expectEqual(5, result.value.map.aa[0].cc);
+    try expectEqual(6, result.value.map.aa[1].cc);
+}

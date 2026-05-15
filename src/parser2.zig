@@ -585,12 +585,15 @@ fn Parser(comptime DateTypes: type) type {
                     }
                 },
                 // Handle union types with dotted notation (e.g., union1.tag_name = 42)
+                // TomlValue is excluded: dotted access on it navigates into a table, not a union tag.
                 .@"union" => {
-                    const next_token = try self.nextToken(null);
-                    if (next_token.kind == .dot) {
-                        return self.processUnionTagKey(ObjectType, object, field.type, field.name, expected_closing_token, alloc_info);
-                    } else {
-                        self.ungetToken();
+                    if (field.type != TomlValue) {
+                        const next_token = try self.nextToken(null);
+                        if (next_token.kind == .dot) {
+                            return self.processUnionTagKey(ObjectType, object, field.type, field.name, expected_closing_token, alloc_info);
+                        } else {
+                            self.ungetToken();
+                        }
                     }
                 },
                 else => {},
@@ -607,37 +610,66 @@ fn Parser(comptime DateTypes: type) type {
             expected_closing_token: TokenKind,
             object_info: *allocation.StructField,
         ) Error!void {
-            const token = try self.nextToken(null);
-            if (token.kind == .dot) {
-                const after_dot_token = try self.nextToken(null);
-                if (after_dot_token.kind != .bare_key and after_dot_token.kind != .string) return error.UnexpectedToken;
+            const hint: ?Scanner.Hint = if (expected_closing_token == .double_right_bracket) .after_double_bracket else null;
+            const token = try self.nextToken(hint);
 
-                if (ValueType == TomlValue) {
-                    if (!object_info.hashmap_initialized) {
-                        object_info.hashmap_initialized = true;
-                        value_ptr.* = TomlValue{ .table = std.StringHashMapUnmanaged(TomlValue).empty };
+            switch (token.kind) {
+                .dot => {
+                    const after_dot_token = try self.nextToken(null);
+                    if (after_dot_token.kind != .bare_key and after_dot_token.kind != .string) return error.UnexpectedToken;
+
+                    if (ValueType == TomlValue) {
+                        if (!object_info.hashmap_initialized) {
+                            object_info.hashmap_initialized = true;
+                            value_ptr.* = TomlValue{ .table = std.StringHashMapUnmanaged(TomlValue).empty };
+                        }
+                        try self.processKey(std.StringHashMapUnmanaged(TomlValue), &value_ptr.table, after_dot_token.content, expected_closing_token, object_info);
+                    } else {
+                        if (@typeInfo(ValueType) != .@"struct") return error.UnexpectedToken;
+                        try self.processKey(ValueType, value_ptr, after_dot_token.content, expected_closing_token, object_info);
                     }
-                    try self.processKey(std.StringHashMapUnmanaged(TomlValue), &value_ptr.table, after_dot_token.content, expected_closing_token, object_info);
-                } else {
-                    const ti = @typeInfo(ValueType);
-                    if (ti != .@"struct") return error.UnexpectedToken;
-
-                    try self.processKey(ValueType, value_ptr, after_dot_token.content, expected_closing_token, object_info);
-                }
-            } else {
-                // Assign value
-                if (token.kind != expected_closing_token) return error.UnexpectedToken;
-                if (token.kind == .equal) {
+                },
+                .equal => {
                     value_ptr.* = try self.parseValue(ValueType, object_info);
-                } else if (ValueType == TomlValue) {
-                    if (!object_info.hashmap_initialized) {
-                        object_info.hashmap_initialized = true;
-                        value_ptr.* = TomlValue{ .table = std.StringHashMapUnmanaged(TomlValue).empty };
+                },
+                .right_bracket => {
+                    if (ValueType == TomlValue) {
+                        if (!object_info.hashmap_initialized) {
+                            object_info.hashmap_initialized = true;
+                            value_ptr.* = TomlValue{ .table = std.StringHashMapUnmanaged(TomlValue).empty };
+                        }
+                        try self.parseTableContent(std.StringHashMapUnmanaged(TomlValue), &value_ptr.table, object_info);
+                    } else {
+                        try self.parseTableContent(ValueType, value_ptr, object_info);
                     }
-                    try self.parseTableContent(std.StringHashMapUnmanaged(TomlValue), &value_ptr.table, object_info);
-                } else {
-                    try self.parseTableContent(ValueType, value_ptr, object_info);
-                }
+                },
+                .double_right_bracket => {
+                    if (ValueType == TomlValue) {
+                        // [[key]] array-of-tables: append a new table entry each time.
+                        if (!object_info.hashmap_initialized) {
+                            value_ptr.* = TomlValue{ .array = &.{} };
+                            object_info.hashmap_initialized = true;
+                        }
+                        const old_arr = value_ptr.*.array;
+                        const new_arr = try self.arena.allocator().alloc(TomlValue, old_arr.len + 1);
+                        @memcpy(new_arr[0..old_arr.len], old_arr);
+
+                        var new_table_obj_info = allocation.StructField.init(self.arena.allocator());
+                        new_table_obj_info.hashmap_initialized = true;
+
+                        var new_table = std.StringHashMapUnmanaged(TomlValue).empty;
+
+                        try self.parseTableContent(std.StringHashMapUnmanaged(TomlValue), &new_table, &new_table_obj_info);
+
+                        new_arr[old_arr.len] = TomlValue{ .table = new_table };
+                        value_ptr.* = TomlValue{ .array = new_arr };
+
+                        self.arena.allocator().free(old_arr);
+                    } else {
+                        try self.parseTableContent(ValueType, value_ptr, object_info);
+                    }
+                },
+                else => return error.UnexpectedToken,
             }
         }
     };
