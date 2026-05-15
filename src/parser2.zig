@@ -645,28 +645,26 @@ fn Parser(comptime DateTypes: type) type {
                 },
                 .double_right_bracket => {
                     if (ValueType == TomlValue) {
-                        // [[key]] array-of-tables: initialize on first encounter, then append a new table.
-                        // With TomlValue (dynamic), the field type is unknown until we see ]], so we
-                        // cannot initialize the array earlier during key traversal.
-                        if (!object_info.hashmap_initialized) {
-                            value_ptr.* = TomlValue{ .array = &.{} };
-                            object_info.hashmap_initialized = true;
-                        }
-                        const old_arr = value_ptr.*.array;
-                        const new_arr = try self.arena.allocator().alloc(TomlValue, old_arr.len + 1);
-                        @memcpy(new_arr[0..old_arr.len], old_arr);
+                        const TomlValueArrayList = std.ArrayList(TomlValue);
+                        const alloc = self.arena.allocator();
 
-                        var new_table_obj_info = allocation.StructField.init(self.arena.allocator());
+                        const list: *TomlValueArrayList = if (object_info.opaque_array_list) |p|
+                            @ptrCast(@alignCast(p))
+                        else blk: {
+                            const l = try alloc.create(TomlValueArrayList);
+                            l.* = TomlValueArrayList.empty;
+                            object_info.opaque_array_list = l;
+                            break :blk l;
+                        };
+
+                        var new_table_obj_info = allocation.StructField.init(alloc);
                         new_table_obj_info.hashmap_initialized = true;
 
-                        var new_table = std.StringHashMapUnmanaged(TomlValue).empty;
+                        const slot = try list.addOne(alloc);
+                        slot.* = TomlValue{ .table = std.StringHashMapUnmanaged(TomlValue).empty };
+                        try self.parseTableContent(std.StringHashMapUnmanaged(TomlValue), &slot.table, &new_table_obj_info);
 
-                        try self.parseTableContent(std.StringHashMapUnmanaged(TomlValue), &new_table, &new_table_obj_info);
-
-                        new_arr[old_arr.len] = TomlValue{ .table = new_table };
-                        value_ptr.* = TomlValue{ .array = new_arr };
-
-                        self.arena.allocator().free(old_arr);
+                        value_ptr.* = TomlValue{ .array = list.items };
                     } else {
                         try self.parseTableContent(ValueType, value_ptr, object_info);
                     }

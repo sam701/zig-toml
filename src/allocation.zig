@@ -49,6 +49,9 @@ pub const StructField = struct {
 
     hashmap_initialized: bool = false,
 
+    /// Opaque pointer to an ArrayList used for dynamic [[key]] array-of-tables accumulation.
+    opaque_array_list: ?*anyopaque = null,
+
     pub fn init(alloc: Allocator) StructField {
         return .{ .fields = std.StringHashMap(AllocatedStructField).init(alloc) };
     }
