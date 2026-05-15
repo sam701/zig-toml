@@ -70,9 +70,11 @@ const StringScanner = struct {
         const c = try self.source.next() orelse return error.UnexpectedEndOfStream;
         var w = self.content_writer;
         switch (c) {
+            'x' => return self.scanUnicode(2),
             'u' => return self.scanUnicode(4),
             'U' => return self.scanUnicode(8),
             'b' => try w.writeByte(0x08),
+            'e' => try w.writeByte(0x1b),
             'f' => try w.writeByte(0x0c),
             't' => try w.writeByte('\t'),
             'n' => try w.writeByte('\n'),
