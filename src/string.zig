@@ -66,6 +66,7 @@ fn parseEscaped(ctx: *Context, delimiter: *const Delimiter, output: *Buffer) !vo
     const c = ctx.next() orelse return error.UnexpectedEOF;
     _ = ctx.next() orelse return error.UnexpectedEOF;
     switch (c) {
+        'x' => try parseUnicode(ctx, 2, output),
         'u' => try parseUnicode(ctx, 4, output),
         'U' => try parseUnicode(ctx, 8, output),
         'b' => try output.append(ctx.alloc, 0x08),
@@ -224,6 +225,13 @@ test "simple" {
     const str = try parse(&ctx);
     try testing.expect(std.mem.eql(u8, str.?, "abc"));
     try testing.expect(ctx.current().? == '=');
+    ctx.alloc.free(str.?);
+}
+
+test "unicode 2" {
+    var ctx = parser.testInput("\"b\\xE4c\"");
+    const str = try parse(&ctx);
+    try testing.expect(std.mem.eql(u8, str.?, "bäc"));
     ctx.alloc.free(str.?);
 }
 
