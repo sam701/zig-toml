@@ -7,9 +7,20 @@ const Error = @import("./root.zig").Scanner.Error;
 const TokenKind = @import("./root.zig").TokenKind;
 
 pub fn scan(source: *Source, content_writer: *Writer) Error!TokenKind {
+    var is_float = false;
+    var is_hex = false;
     while (try source.next()) |c| {
         switch (c) {
-            '0'...'9', 'a'...'z', 'A'...'Z', '+', '-', '_', '.', ':' => {},
+            '0'...'9', 'a'...'z', 'A'...'Z', '+', '-', '_', '.', ':' => {
+                if (!is_hex) switch (c) {
+                    '.', 'i', 'n', 'e', 'E' => is_float = true,
+                    'x', 'X', 'o', 'O', 'b', 'B' => {
+                        if (content_writer.end == 1 and content_writer.buffer[0] == '0')
+                            is_hex = true;
+                    },
+                    else => {},
+                };
+            },
             ' ' => {
                 if (content_writer.end == 10 and content_writer.buffer[4] == '-') {
                     if (try source.next()) |c2| {
@@ -42,17 +53,17 @@ pub fn scan(source: *Source, content_writer: *Writer) Error!TokenKind {
             return .datetime_local;
     }
 
-    return .number;
+    return if (is_float) .float else .integer;
 }
 
 test "numbers" {
-    try testInput("123", &.{.{ .kind = .number, .content = "123" }}, .expect_value);
-    try testInput("123e4", &.{.{ .kind = .number, .content = "123e4" }}, .expect_value);
-    try testInput("123_4", &.{.{ .kind = .number, .content = "123_4" }}, .expect_value);
-    try testInput(".7", &.{.{ .kind = .number, .content = ".7" }}, .expect_value);
-    try testInput("+7", &.{.{ .kind = .number, .content = "+7" }}, .expect_value);
-    try testInput("-inf", &.{.{ .kind = .number, .content = "-inf" }}, .expect_value);
-    try testInput("nan", &.{.{ .kind = .number, .content = "nan" }}, .expect_value);
+    try testInput("123", &.{.{ .kind = .integer, .content = "123" }}, .expect_value);
+    try testInput("123e4", &.{.{ .kind = .float, .content = "123e4" }}, .expect_value);
+    try testInput("123_4", &.{.{ .kind = .integer, .content = "123_4" }}, .expect_value);
+    try testInput(".7", &.{.{ .kind = .float, .content = ".7" }}, .expect_value);
+    try testInput("+7", &.{.{ .kind = .integer, .content = "+7" }}, .expect_value);
+    try testInput("-inf", &.{.{ .kind = .float, .content = "-inf" }}, .expect_value);
+    try testInput("nan", &.{.{ .kind = .float, .content = "nan" }}, .expect_value);
 }
 
 test "datetime" {

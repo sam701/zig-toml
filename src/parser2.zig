@@ -222,7 +222,8 @@ fn Parser(comptime DateTypes: type) type {
                 self.ungetToken();
                 switch (token.kind) {
                     .string, .string_multiline => return TomlValue{ .string = try self.parseValue([]const u8, struct_allocation_info) },
-                    .number => return TomlValue{ .number = try self.parseValue(f64, struct_allocation_info) },
+                    .integer => return TomlValue{ .integer = try self.parseValue(i64, struct_allocation_info) },
+                    .float => return TomlValue{ .float = try self.parseValue(f64, struct_allocation_info) },
                     .true, .false => return TomlValue{ .boolean = try self.parseValue(bool, struct_allocation_info) },
 
                     .left_bracket => return TomlValue{ .array = try self.parseValue([]const TomlValue, struct_allocation_info) },
@@ -247,11 +248,11 @@ fn Parser(comptime DateTypes: type) type {
 
             switch (ti) {
                 .int => {
-                    if (token.kind != .number) return error.InvalidValueType;
+                    if (token.kind != .integer) return error.InvalidValueType;
                     return std.fmt.parseInt(ValueType, token.content, 0);
                 },
                 .float => {
-                    if (token.kind != .number) return error.InvalidValueType;
+                    if (token.kind != .float) return error.InvalidValueType;
                     return std.fmt.parseFloat(ValueType, token.content);
                 },
                 .bool => {

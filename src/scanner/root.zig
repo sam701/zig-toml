@@ -30,7 +30,8 @@ pub const TokenKind = enum {
     bare_key,
     string,
     string_multiline,
-    number,
+    integer,
+    float,
     date,
     time,
     datetime,
@@ -132,7 +133,7 @@ pub const Scanner = struct {
                                 switch (c2) {
                                     'u' => token_kind = try value.ensure(&self.source, "ll", .null),
                                     'a' => {
-                                        token_kind = try value.ensure(&self.source, "n", .number);
+                                        token_kind = try value.ensure(&self.source, "n", .float);
                                         try self.content_buffer.writer.writeAll("nan");
                                     },
                                     else => return error.UnexpectedChar,

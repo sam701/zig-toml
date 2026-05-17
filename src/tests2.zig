@@ -179,13 +179,13 @@ test "value array" {
     const result = try parse(St, &reader, std.testing.allocator);
     defer result.deinit();
 
-    try expectEqual(3.0, result.value.values[0].number);
+    try expectEqual(3, result.value.values[0].integer);
     try expectEqualStrings("hello", result.value.values[1].string);
-    try expectEqual(4.0, result.value.values[2].array[0].number);
+    try expectEqual(4, result.value.values[2].array[0].integer);
     try expectEqual(true, result.value.values[3].boolean);
     try expectEqual(2, result.value.values[4].table.size);
-    try expectEqual(3.0, result.value.values[4].table.get("aa").?.number);
-    try expectEqual(4.0, result.value.values[4].table.get("bb").?.number);
+    try expectEqual(3, result.value.values[4].table.get("aa").?.integer);
+    try expectEqual(4, result.value.values[4].table.get("bb").?.integer);
 }
 
 test "int hashmap" {
@@ -213,8 +213,8 @@ test "value hashmap" {
     defer result.deinit();
 
     try expectEqual(2, result.value.table.get("map").?.table.size);
-    try expectEqual(4.0, result.value.table.get("map").?.table.get("aa").?.number);
-    try expectEqual(5.0, result.value.table.get("map").?.table.get("bb").?.number);
+    try expectEqual(4, result.value.table.get("map").?.table.get("aa").?.integer);
+    try expectEqual(5, result.value.table.get("map").?.table.get("bb").?.integer);
 }
 
 test "value hashmap - nested values" {
@@ -230,9 +230,9 @@ test "value hashmap - nested values" {
 
     try expectEqual(2, result.value.map.size);
     try expectEqual(2, result.value.map.get("aa").?.table.size);
-    try expectEqual(4.0, result.value.map.get("aa").?.table.get("cc").?.number);
-    try expectEqual(6.0, result.value.map.get("aa").?.table.get("dd").?.number);
-    try expectEqual(5.0, result.value.map.get("bb").?.number);
+    try expectEqual(4, result.value.map.get("aa").?.table.get("cc").?.integer);
+    try expectEqual(6, result.value.map.get("aa").?.table.get("dd").?.integer);
+    try expectEqual(5, result.value.map.get("bb").?.integer);
 }
 
 test "value hashmap - nested key values" {
@@ -248,8 +248,8 @@ test "value hashmap - nested key values" {
 
     try expectEqual(1, result.value.map.size);
     try expectEqual(2, result.value.map.get("aa").?.table.size);
-    try expectEqual(5.0, result.value.map.get("aa").?.table.get("b1").?.table.get("cc").?.number);
-    try expectEqual(6.0, result.value.map.get("aa").?.table.get("b2").?.table.get("bb").?.number);
+    try expectEqual(5, result.value.map.get("aa").?.table.get("b1").?.table.get("cc").?.integer);
+    try expectEqual(6, result.value.map.get("aa").?.table.get("b2").?.table.get("bb").?.integer);
 }
 
 test "value in as struct" {
@@ -260,7 +260,7 @@ test "value in as struct" {
     const result = try parse(St, &reader, std.testing.allocator);
     defer result.deinit();
 
-    try expectEqual(5.0, result.value.n1.number);
+    try expectEqual(5, result.value.n1.integer);
 }
 
 test "value key array" {
@@ -275,8 +275,8 @@ test "value key array" {
     defer result.deinit();
 
     try expectEqual(2, result.value.map.table.get("aa").?.array.len);
-    try expectEqual(5.0, result.value.map.table.get("aa").?.array[0].table.get("cc").?.number);
-    try expectEqual(6.0, result.value.map.table.get("aa").?.array[1].table.get("cc").?.number);
+    try expectEqual(5, result.value.map.table.get("aa").?.array[0].table.get("cc").?.integer);
+    try expectEqual(6, result.value.map.table.get("aa").?.array[1].table.get("cc").?.integer);
 }
 
 test "array table" {

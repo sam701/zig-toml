@@ -26,7 +26,8 @@ pub const DefaultDateTypes = struct {
 pub fn Value(comptime DateTypes: type) type {
     return union(enum) {
         string: []const u8,
-        number: f64,
+        integer: i64,
+        float: f64,
         boolean: bool,
         date: DateTypes.Date,
         time: DateTypes.Time,
