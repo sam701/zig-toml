@@ -52,6 +52,25 @@ pub fn build(b: *std.Build) void {
     //     b.default_step.dependOn(build_examples);
     // }
 
+    // toml-test decoder
+    {
+        const decoder_mod = b.addModule("toml-test-decoder", .{
+            .root_source_file = b.path("test/main.zig"),
+            .target = targetOpt,
+            .optimize = optimizeOpt,
+        });
+        decoder_mod.addImport("toml", module);
+
+        const decoder = b.addExecutable(.{
+            .name = "toml-test-decoder",
+            .root_module = decoder_mod,
+        });
+        b.installArtifact(decoder);
+
+        const decoder_step = b.step("decoder", "Build the toml-test decoder");
+        decoder_step.dependOn(&decoder.step);
+    }
+
     // Docs
     {
         const lib = b.addLibrary(.{

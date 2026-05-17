@@ -401,6 +401,21 @@ fn Parser(comptime DateTypes: type) type {
             try self.processAfterKey(FieldType, @field(object, field_name), expected_closing_token, &result.value_ptr.object);
         }
 
+        fn processPointerToLastElement(
+            self: *Self,
+            comptime FieldType: type,
+            comptime field_name: []const u8,
+            expected_closing_token: TokenKind,
+            object_info: *allocation.StructField,
+        ) Error!void {
+            const FieldValueArrayList = std.ArrayList(FieldType);
+            const entry = object_info.fields.getEntry(field_name) orelse return error.UnexpectedToken;
+            var ar: *FieldValueArrayList = @ptrCast(@alignCast(entry.value_ptr.array.field_values_array_list));
+            const last_value_ptr = &ar.items[ar.items.len - 1];
+            const last_obj_info = &entry.value_ptr.array.objects.items[entry.value_ptr.array.objects.items.len - 1].object;
+            try self.processAfterKey(FieldType, last_value_ptr, expected_closing_token, last_obj_info);
+        }
+
         fn processPointerToMany(
             self: *Self,
             comptime ObjectType: type,
@@ -538,8 +553,8 @@ fn Parser(comptime DateTypes: type) type {
                 if (object_info.hashmap_initialized) {
                     if (object.get(key)) |existing| val = existing;
                 }
-                const obj_info = try object_info.markAsObject(key);
                 const key_copy = try self.arena.allocator().dupe(u8, key);
+                const obj_info = try object_info.markAsObject(key_copy);
                 try self.processAfterKey(ValueType, &val, expected_closing_token, obj_info);
                 if (debug) std.debug.print("== type = {s}, key = {s}, val = {any}\n", .{ @typeName(ValueType), key_copy, val });
                 if (!object_info.hashmap_initialized) {
@@ -579,7 +594,12 @@ fn Parser(comptime DateTypes: type) type {
                     switch (field_type_info.pointer.child) {
                         u8 => {},
                         else => {
-                            if (try self.peekNextTokenKind(expected_closing_token) != .equal) {
+                            const next_kind = try self.peekNextTokenKind(expected_closing_token);
+                            if (next_kind != .equal) {
+                                if (next_kind == .dot) {
+                                    // [a.b.c] where b is []T: per TOML spec, navigate into the last element.
+                                    return self.processPointerToLastElement(field_type_info.pointer.child, field.name, expected_closing_token, alloc_info);
+                                }
                                 return self.processPointerToMany(ObjectType, object, field_type_info.pointer.child, field.name, expected_closing_token, alloc_info);
                             }
                         },
@@ -620,11 +640,19 @@ fn Parser(comptime DateTypes: type) type {
                     if (after_dot_token.kind != .bare_key and after_dot_token.kind != .string) return error.UnexpectedToken;
 
                     if (ValueType == TomlValue) {
-                        if (!object_info.hashmap_initialized) {
-                            object_info.hashmap_initialized = true;
-                            value_ptr.* = TomlValue{ .table = std.StringHashMapUnmanaged(TomlValue).empty };
+                        if (value_ptr.* == .array) {
+                            const TomlValueArrayList = std.ArrayList(TomlValue);
+                            const list: *TomlValueArrayList = @ptrCast(@alignCast(object_info.opaque_array_list.?));
+                            const last = &list.items[list.items.len - 1];
+                            const elem_info = object_info.array_last_element_info.?;
+                            try self.processKey(std.StringHashMapUnmanaged(TomlValue), &last.table, after_dot_token.content, expected_closing_token, elem_info);
+                        } else {
+                            if (!object_info.hashmap_initialized) {
+                                object_info.hashmap_initialized = true;
+                                value_ptr.* = TomlValue{ .table = std.StringHashMapUnmanaged(TomlValue).empty };
+                            }
+                            try self.processKey(std.StringHashMapUnmanaged(TomlValue), &value_ptr.table, after_dot_token.content, expected_closing_token, object_info);
                         }
-                        try self.processKey(std.StringHashMapUnmanaged(TomlValue), &value_ptr.table, after_dot_token.content, expected_closing_token, object_info);
                     } else {
                         if (@typeInfo(ValueType) != .@"struct") return error.UnexpectedToken;
                         try self.processKey(ValueType, value_ptr, after_dot_token.content, expected_closing_token, object_info);
@@ -658,12 +686,14 @@ fn Parser(comptime DateTypes: type) type {
                             break :blk l;
                         };
 
-                        var new_table_obj_info = allocation.StructField.init(alloc);
-                        new_table_obj_info.hashmap_initialized = true;
+                        const new_elem_info = try alloc.create(allocation.StructField);
+                        new_elem_info.* = allocation.StructField.init(alloc);
+                        new_elem_info.hashmap_initialized = true;
+                        object_info.array_last_element_info = new_elem_info;
 
                         const slot = try list.addOne(alloc);
                         slot.* = TomlValue{ .table = std.StringHashMapUnmanaged(TomlValue).empty };
-                        try self.parseTableContent(std.StringHashMapUnmanaged(TomlValue), &slot.table, &new_table_obj_info);
+                        try self.parseTableContent(std.StringHashMapUnmanaged(TomlValue), &slot.table, new_elem_info);
 
                         value_ptr.* = TomlValue{ .array = list.items };
                     } else {

@@ -300,3 +300,51 @@ test "array table" {
     try expectEqual(5, result.value.map.aa[0].cc);
     try expectEqual(6, result.value.map.aa[1].cc);
 }
+
+test "array field - value" {
+    var reader = std.Io.Reader.fixed(
+        \\ [[a.b]]
+        \\ f1 = 3
+        \\ [a.b.c]
+        \\ f2 = 5
+    );
+    const result = try parse(Value, &reader, std.testing.allocator);
+    defer result.deinit();
+
+    try expectEqual(1, result.value.table.get("a").?.table.get("b").?.array.len);
+    try expectEqual(3, result.value.table.get("a").?.table.get("b").?.array[0].table.get("f1").?.integer);
+    try expectEqual(5, result.value.table.get("a").?.table.get("b").?.array[0].table.get("c").?.table.get("f2").?.integer);
+}
+
+test "array field - struct" {
+    var reader = std.Io.Reader.fixed(
+        \\ [[a.b]]
+        \\ f1 = 3
+        \\ [a.b.c]
+        \\ f2 = 5
+    );
+    const St = struct {
+        a: struct {
+            b: []struct {
+                f1: i32,
+                c: struct {
+                    f2: i32,
+                },
+            },
+        },
+    };
+    const result = try parse(St, &reader, std.testing.allocator);
+    defer result.deinit();
+
+    try expectEqual(1, result.value.a.b.len);
+    try expectEqual(3, result.value.a.b[0].f1);
+    try expectEqual(5, result.value.a.b[0].c.f2);
+}
+
+test "tmp" {
+    const file = try std.Io.Dir.cwd().openFile(std.testing.io, "./test/doc1.toml.txt", .{});
+    var buf: [4096]u8 = undefined;
+    var r = file.reader(std.testing.io, &buf);
+    const result = try parse(Value, &r.interface, std.testing.allocator);
+    defer result.deinit();
+}

@@ -52,6 +52,11 @@ pub const StructField = struct {
     /// Opaque pointer to an ArrayList used for dynamic [[key]] array-of-tables accumulation.
     opaque_array_list: ?*anyopaque = null,
 
+    /// Allocation info for the most-recently-defined element of an array-of-tables.
+    /// Used to navigate subtable headers like `[a.b.c]` after `[[a.b]]`, which per TOML
+    /// spec target the last element of the array.
+    array_last_element_info: ?*StructField = null,
+
     pub fn init(alloc: Allocator) StructField {
         return .{ .fields = std.StringHashMap(AllocatedStructField).init(alloc) };
     }
