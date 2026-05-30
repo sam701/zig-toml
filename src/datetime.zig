@@ -11,7 +11,7 @@ pub const Date = struct {
 pub const Time = struct {
     hour: u5,
     minute: u6,
-    second: u6,
+    second: u6 = 0,
     nanosecond: u30 = 0,
 };
 
@@ -63,8 +63,7 @@ pub const TimeError = error{
 };
 
 pub fn interpretTime(txt: []const u8) TimeError!?Time {
-    if (txt.len < 8 or txt[2] != ':' or txt[5] != ':') return null;
-    if (txt.len > 8 and (txt[8] != '.' or txt.len < 15 or txt.len % 3 != 0)) return TimeError.InvalidNanoSecond;
+    if (txt.len < 5 or txt[2] != ':') return null;
 
     var t: Time = undefined;
     t.hour = std.fmt.parseInt(u5, txt[0..2], 10) catch return TimeError.InvalidHour;
@@ -73,17 +72,36 @@ pub fn interpretTime(txt: []const u8) TimeError!?Time {
     t.minute = std.fmt.parseInt(u6, txt[3..5], 10) catch return TimeError.InvalidMinute;
     if (t.minute > 59) return TimeError.InvalidMinute;
 
+    if (txt.len == 5) {
+        t.second = 0;
+        t.nanosecond = 0;
+        return t;
+    }
+
+    if (txt.len < 8) return TimeError.InvalidSecond;
     t.second = std.fmt.parseInt(u6, txt[6..8], 10) catch return TimeError.InvalidSecond;
     if (t.second > 59) return TimeError.InvalidSecond;
 
-    if (txt.len == 15) {
-        t.nanosecond = std.fmt.parseInt(u30, txt[9..], 10) catch return TimeError.InvalidNanoSecond;
-        t.nanosecond *= 1000;
-    } else if (txt.len > 15) {
-        t.nanosecond = std.fmt.parseInt(u30, txt[9..18], 10) catch return TimeError.InvalidNanoSecond;
-    } else {
+    if (txt.len == 8) {
         t.nanosecond = 0;
+        return t;
+    } else if (txt[8] != '.' or txt.len < 10) {
+        return TimeError.InvalidNanoSecond;
     }
+
+    var nano_slice = txt[9..];
+    var nano_multiplier: u30 = 1;
+    if (nano_slice.len > 9) {
+        for (nano_slice) |c| {
+            if (!std.ascii.isDigit(c)) return TimeError.InvalidNanoSecond;
+        }
+        nano_slice = nano_slice[0..9];
+    } else {
+        nano_multiplier = std.math.pow(u30, 10, @as(u30, @intCast(9 - nano_slice.len)));
+    }
+
+    t.nanosecond = std.fmt.parseInt(u30, nano_slice, 10) catch return TimeError.InvalidNanoSecond;
+    t.nanosecond *= nano_multiplier;
 
     return t;
 }
@@ -94,7 +112,9 @@ fn testTime(str: []const u8, expected: Time) !void {
 }
 
 test "time" {
+    try testTime("15:16", Time{ .hour = 15, .minute = 16 });
     try testTime("15:16:17", Time{ .hour = 15, .minute = 16, .second = 17 });
+    try testTime("15:16:17.1", Time{ .hour = 15, .minute = 16, .second = 17, .nanosecond = 100000000 });
     try testTime("15:16:17.123456", Time{ .hour = 15, .minute = 16, .second = 17, .nanosecond = 123456000 });
     try testTime("15:16:17.123456789", Time{ .hour = 15, .minute = 16, .second = 17, .nanosecond = 123456789 });
     try testTime("15:16:17.123456789123", Time{ .hour = 15, .minute = 16, .second = 17, .nanosecond = 123456789 });
@@ -103,9 +123,8 @@ test "time" {
     try testing.expectError(TimeError.InvalidMinute, interpretTime("23:76:17"));
     try testing.expectError(TimeError.InvalidSecond, interpretTime("23:16:87"));
     try testing.expectError(TimeError.InvalidNanoSecond, interpretTime("23:16:17."));
-    try testing.expectError(TimeError.InvalidNanoSecond, interpretTime("23:16:17.12345"));
     try testing.expectError(TimeError.InvalidNanoSecond, interpretTime("23:16:17.12345a"));
-    try testing.expectError(TimeError.InvalidNanoSecond, interpretTime("23:16:17.1234567"));
+    try testing.expectError(TimeError.InvalidNanoSecond, interpretTime("23:16:17.123456789abc"));
 }
 
 pub const TimeWithOffset = struct {
@@ -114,8 +133,8 @@ pub const TimeWithOffset = struct {
 };
 
 pub fn interpretTimeAndOffset(txt: []const u8) !?TimeWithOffset {
-    if (txt.len < 8) return null;
-    if (txt.len == 8) return TimeWithOffset{ .time = try interpretTime(txt) orelse return null };
+    if (txt.len < 5) return null;
+    if (txt.len == 5 or txt.len == 8) return TimeWithOffset{ .time = try interpretTime(txt) orelse return null };
 
     var to: TimeWithOffset = undefined;
     if (txt[txt.len - 1] == 'Z') {
@@ -146,7 +165,7 @@ fn interpretOffset(txt: []const u8) OffsetError!?i16 {
 pub const DateTimeError = DateError || TimeError || OffsetError;
 
 pub fn interpretDateTime(txt: []const u8) DateTimeError!?DateTime {
-    if (txt.len < 19 or txt[10] != 'T') return null;
+    if (txt.len < 16 or txt[10] != 'T') return null;
     const date = try interpretDate(txt[0..10]) orelse return null;
     const time_with_offset = try interpretTimeAndOffset(txt[11..]) orelse return null;
     return DateTime{
