@@ -1,7 +1,7 @@
 # zig-toml
 [![Zig Docs](https://img.shields.io/badge/docs-zig-%23f7a41d)](https://sam701.github.io/zig-toml)
 
-Zig [TOML v1.0.0](https://toml.io/en/v1.0.0) parser.
+Zig [TOML v1.1.0](https://toml.io/en/v1.1.0) parser.
 
 This is a top-down LL parser that parses directly into Zig structs.
 
