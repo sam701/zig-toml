@@ -29,16 +29,16 @@ pub fn intoStruct(ctx: *Context, comptime T: type, dest: *T, table: *Table) !voi
     }
     switch (@typeInfo(T)) {
         .@"struct" => |info| {
-            inline for (info.fields) |field_info| {
-                try ctx.field_path.append(ctx.alloc, field_info.name);
-                if (table.fetchRemove(field_info.name)) |entry| {
-                    try setValue(ctx, field_info.type, &@field(dest.*, field_info.name), &entry.value);
+            inline for (info.field_names, info.field_types, info.field_attrs) |field_name, FieldType, field_attr| {
+                try ctx.field_path.append(ctx.alloc, field_name);
+                if (table.fetchRemove(field_name)) |entry| {
+                    try setValue(ctx, FieldType, &@field(dest.*, field_name), &entry.value);
                     ctx.alloc.free(entry.key);
                 } else {
-                    if (@typeInfo(field_info.type) == .optional)
-                        @field(dest.*, field_info.name) = null
-                    else if (field_info.default_value_ptr) |defaultValue| {
-                        @field(dest.*, field_info.name) = @as(*const field_info.type, @ptrCast(@alignCast(defaultValue))).*;
+                    if (@typeInfo(FieldType) == .optional)
+                        @field(dest.*, field_name) = null
+                    else if (field_attr.default_value_ptr) |defaultValue| {
+                        @field(dest.*, field_name) = @as(*const FieldType, @ptrCast(@alignCast(defaultValue))).*;
                     } else return error.MissingRequiredField;
                 }
                 _ = ctx.field_path.pop();
@@ -182,9 +182,9 @@ fn setValue(ctx: *Context, comptime T: type, dest: *T, value: *const Value) !voi
         .@"enum" => |tinfo| {
             switch (value.*) {
                 .string => |s| {
-                    inline for (tinfo.fields) |field| {
-                        if (std.mem.eql(u8, field.name, s)) {
-                            dest.* = @enumFromInt(field.value);
+                    inline for (tinfo.field_names, tinfo.field_values) |field_name, field_value| {
+                        if (std.mem.eql(u8, field_name, s)) {
+                            dest.* = @enumFromInt(field_value);
                             break;
                         }
                     } else {
@@ -195,23 +195,23 @@ fn setValue(ctx: *Context, comptime T: type, dest: *T, value: *const Value) !voi
             }
         },
         .@"union" => |tinfo| {
-            inline for (tinfo.fields) |field| {
+            inline for (tinfo.field_names, tinfo.field_types) |field_name, FieldType| {
                 switch (value.*) {
                     .string => |s| {
-                        if (std.mem.eql(u8, field.name, s)) {
-                            if (field.type == void) {
-                                dest.* = @unionInit(T, field.name, {});
+                        if (std.mem.eql(u8, field_name, s)) {
+                            if (FieldType == void) {
+                                dest.* = @unionInit(T, field_name, {});
                                 break;
                             }
                         }
                     },
                     .table => |tbl| {
-                        const new_value = tbl.get(field.name);
+                        const new_value = tbl.get(field_name);
 
                         if (new_value != null) {
-                            var temp_test: field.type = undefined;
-                            try setValue(ctx, field.type, &temp_test, &new_value.?);
-                            dest.* = @unionInit(T, field.name, temp_test);
+                            var temp_test: FieldType = undefined;
+                            try setValue(ctx, FieldType, &temp_test, &new_value.?);
+                            dest.* = @unionInit(T, field_name, temp_test);
                             break;
                         }
                     },

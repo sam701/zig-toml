@@ -6,7 +6,7 @@ const datetime = @import("../datetime.zig");
 const Date = datetime.Date;
 const Time = datetime.Time;
 const DateTime = datetime.DateTime;
-const StructField = std.builtin.Type.StructField;
+const LangType = std.lang.Type;
 
 const SerializerState = struct {
     allocator: Allocator,
@@ -32,6 +32,22 @@ pub fn serialize(allocator: Allocator, obj: anytype, writer: *std.Io.Writer) !vo
     var state = SerializerState.init(allocator);
     defer state.deinit();
     try serializeValue(&state, tinfo, obj, writer);
+}
+
+fn sortedFieldIndices(comptime sinfo: LangType.Struct) [sinfo.field_names.len]usize {
+    var idx: [sinfo.field_names.len]usize = undefined;
+    for (0..sinfo.field_names.len) |i| idx[i] = i;
+    // insertion sort by field name
+    var i: usize = 1;
+    while (i < sinfo.field_names.len) : (i += 1) {
+        const key_idx = idx[i];
+        var j: usize = i;
+        while (j > 0 and std.mem.order(u8, sinfo.field_names[idx[j - 1]], sinfo.field_names[key_idx]) == .gt) : (j -= 1) {
+            idx[j] = idx[j - 1];
+        }
+        idx[j] = key_idx;
+    }
+    return idx;
 }
 
 fn serializeStruct(state: *SerializerState, value: anytype, writer: *std.Io.Writer) !void {
@@ -76,61 +92,65 @@ fn serializeStruct(state: *SerializerState, value: anytype, writer: *std.Io.Writ
         },
     }
 
-    comptime var fields = tinfo.@"struct".fields[0..tinfo.@"struct".fields.len].*;
-    comptime std.mem.sortUnstable(StructField, &fields, {}, cmpFields);
+    const sinfo = tinfo.@"struct";
+    const sorted_indices = comptime sortedFieldIndices(sinfo);
 
-    inline for (fields) |field| {
-        const ftype = @typeInfo(field.type);
+    inline for (sorted_indices) |idx| {
+        const field_name = sinfo.field_names[idx];
+        const FieldType = sinfo.field_types[idx];
+        const ftype = @typeInfo(FieldType);
 
         if (ftype == .array) {
             const child_t = @typeInfo(ftype.array.child);
-            try state.table_comp.append(state.allocator, field.name);
+            try state.table_comp.append(state.allocator, field_name);
             if (child_t == .@"struct" and isMapType(ftype.array.child)) {
-                for (@field(value, field.name)) |v| {
+                for (@field(value, field_name)) |v| {
                     _ = try writer.write("[[");
                     for (0..state.table_comp.items.len - 1) |i| {
                         try writer.print("{s}.", .{state.table_comp.items[i]});
                     }
-                    try writer.print("{s}]]\n", .{field.name});
+                    try writer.print("{s}]]\n", .{field_name});
                     try serializeMap(state, v, writer);
                 }
             } else if (child_t == .@"struct") {
-                for (@field(value, field.name)) |v| {
+                for (@field(value, field_name)) |v| {
                     _ = try writer.write("[[");
                     for (0..state.table_comp.items.len - 1) |i| {
                         try writer.print("{s}.", .{state.table_comp.items[i]});
                     }
-                    try writer.print("{s}]]\n", .{field.name});
+                    try writer.print("{s}]]\n", .{field_name});
                     try serializeStruct(state, v, writer);
                 }
             } else if (comptime isPointerToStruct(child_t)) {
-                for (@field(value, field.name)) |v| {
+                for (@field(value, field_name)) |v| {
                     while (@typeInfo(@TypeOf(@typeInfo(@TypeOf(v)).pointer.child)) == .pointer) v = v.*;
                     _ = try writer.write("[[");
                     for (0..state.table_comp.items.len - 1) |i| {
                         try writer.print("{s}.", .{state.table_comp.items[i]});
                     }
-                    try writer.print("{s}]]\n", .{field.name});
+                    try writer.print("{s}]]\n", .{field_name});
                     try serializeStruct(state, v.*, writer);
                 }
             } else {
-                try writer.print("{s} = ", .{field.name});
-                try serializeValue(state, ftype, @field(value, field.name), writer);
+                try writer.print("{s} = ", .{field_name});
+                try serializeValue(state, ftype, @field(value, field_name), writer);
                 _ = try writer.write("\n");
             }
             _ = state.table_comp.pop();
         } else if (ftype != .@"struct" and comptime !isPointerToStruct(ftype)) {
-            try writer.print("{s} = ", .{field.name});
-            try serializeValue(state, ftype, @field(value, field.name), writer);
+            try writer.print("{s} = ", .{field_name});
+            try serializeValue(state, ftype, @field(value, field_name), writer);
             _ = try writer.write("\n");
         }
     }
 
-    inline for (fields) |field| {
-        const ftype = @typeInfo(field.type);
+    inline for (sorted_indices) |idx| {
+        const field_name = sinfo.field_names[idx];
+        const FieldType = sinfo.field_types[idx];
+        const ftype = @typeInfo(FieldType);
         if (ftype != .@"struct" and comptime !isPointerToStruct(ftype)) continue;
 
-        try state.table_comp.append(state.allocator, field.name);
+        try state.table_comp.append(state.allocator, field_name);
 
         // Check if the struct comprises of fields which are basically other structs
         // If so, we don't write anything for this struct and instead write only the
@@ -141,8 +161,9 @@ fn serializeStruct(state: *SerializerState, value: anytype, writer: *std.Io.Writ
         comptime var ftype2 = ftype;
         inline while (ftype2 == .pointer) ftype2 = @typeInfo(ftype2.pointer.child);
         var has_basic_field: bool = undefined;
-        inline for (ftype2.@"struct".fields) |inner_field| {
-            const iftype = @typeInfo(inner_field.type);
+        const sinfo2 = ftype2.@"struct";
+        inline for (sinfo2.field_names, sinfo2.field_types) |_, InnerFieldType| {
+            const iftype = @typeInfo(InnerFieldType);
             if (iftype != .@"struct" and comptime !isPointerToStruct(iftype)) {
                 has_basic_field = true;
                 break;
@@ -155,15 +176,15 @@ fn serializeStruct(state: *SerializerState, value: anytype, writer: *std.Io.Writ
             for (0..state.table_comp.items.len - 1) |i| {
                 try writer.print("{s}.", .{state.table_comp.items[i]});
             }
-            try writer.print("{s}]\n", .{field.name});
+            try writer.print("{s}]\n", .{field_name});
         }
 
-        try serializeValue(state, ftype, @field(value, field.name), writer);
+        try serializeValue(state, ftype, @field(value, field_name), writer);
         _ = state.table_comp.pop();
     }
 }
 
-fn isPointerToStruct(t: std.builtin.Type) bool {
+fn isPointerToStruct(t: LangType) bool {
     if (t != .pointer) return false;
 
     var child = @typeInfo(t.pointer.child);
@@ -172,7 +193,7 @@ fn isPointerToStruct(t: std.builtin.Type) bool {
     return child == .@"struct";
 }
 
-fn serializeValue(state: *SerializerState, t: std.builtin.Type, value: anytype, writer: *std.Io.Writer) !void {
+fn serializeValue(state: *SerializerState, t: LangType, value: anytype, writer: *std.Io.Writer) !void {
     switch (t) {
         .int, .float, .comptime_int, .comptime_float => {
             if (t == .float) {
@@ -309,16 +330,12 @@ fn serializeMap(state: *SerializerState, value: anytype, writer: *std.Io.Writer)
     }
 }
 
-inline fn hasStringType(t: std.builtin.Type) bool {
-    return ((t.pointer.child == u8 and t.pointer.size == .slice) or (@typeInfo(t.pointer.child) == .array and @typeInfo(t.pointer.child).array.child == u8) and t.pointer.is_const);
+inline fn hasStringType(t: LangType) bool {
+    return ((t.pointer.child == u8 and t.pointer.size == .slice) or (@typeInfo(t.pointer.child) == .array and @typeInfo(t.pointer.child).array.child == u8) and t.pointer.attrs.@"const");
 }
 
 inline fn isMapType(val_t: type) bool {
     return @hasDecl(val_t, "keyIterator") and @hasDecl(val_t, "valueIterator") and @hasDecl(val_t, "iterator");
-}
-
-fn cmpFields(_: void, lhs: StructField, rhs: StructField) bool {
-    return std.mem.order(u8, lhs.name, rhs.name) == .lt;
 }
 
 fn cmpStrings(_: void, lhs: []const u8, rhs: []const u8) bool {

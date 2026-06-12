@@ -34,9 +34,6 @@ pub fn build(b: *std.Build) void {
         b.installArtifact(example1);
 
         const run_example1 = b.addRunArtifact(example1);
-        if (b.args) |args| {
-            run_example1.addArgs(args);
-        }
 
         const build_examples = b.step("examples", "Build and run examples");
         build_examples.dependOn(&run_example1.step);
