@@ -8,6 +8,8 @@ pub const parse = parser.parse;
 
 // TODO: docs
 pub const Value = value.Value;
+pub const Table = value.Table;
+pub const Array = value.Array;
 pub const DefaultDateTypes = value.DefaultDateTypes;
 pub const ValueError = value.Error;
 

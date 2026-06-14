@@ -6,7 +6,6 @@ const Reader = std.Io.Reader;
 const Allocator = std.mem.Allocator;
 const ArenaAllocator = std.heap.ArenaAllocator;
 const SourceLocation = @import("./scanner/source.zig").SourceLocation;
-const allocation = @import("./allocation.zig");
 const value = @import("./value2.zig");
 
 pub const Parsed = std.json.Parsed;
@@ -14,9 +13,10 @@ pub const Error = Scanner.Error || std.fmt.ParseIntError || std.fmt.ParseFloatEr
     UnexpectedToken,
     NotStruct,
     InvalidValueType,
+    DuplicateValue,
 };
 
-const debug = true;
+const debug = false;
 
 // TODO: add options that can specify
 // - how to treat missing fields,
@@ -42,32 +42,21 @@ pub fn parse(comptime T: type, reader: *Reader, alloc: Allocator) Error!Parsed(T
 pub fn parseWith(comptime T: type, reader: *Reader, alloc: Allocator, comptime DateTypes: type) Error!Parsed(T) {
     var p = try Parser(DateTypes).init(reader, alloc);
     defer p.deinit();
+
+    const table = try p.parseDocument();
+
+    // if (T != value.Table(DateTypes)) unreachable;
+
     return Parsed(T){
         .arena = p.arena,
-        .value = try p.parseTopLevelStruct(T),
+        .value = table,
     };
-}
-
-const HashMapInfo = struct {
-    is_hashmap: bool,
-    value_type: ?type = null,
-};
-
-// Returns hashmap info if it's a hashmap type, otherwise returns null.
-fn getHashMapInfo(comptime T: type) ?type {
-    if (!@hasDecl(T, "put")) return null;
-    const put_fn_info = @typeInfo(@TypeOf(T.put)).@"fn";
-    if (put_fn_info.params.len != 4) return null;
-
-    // Verify key type is []const u8 (param[2] is the key)
-    const KeyType = put_fn_info.params[2].type.?;
-    if (KeyType != []const u8) return null;
-
-    return put_fn_info.params[3].type.?;
 }
 
 fn Parser(comptime DateTypes: type) type {
     const TomlValue = value.Value(DateTypes);
+    const TomlTable = value.Table(DateTypes);
+    const TomlArray = value.Array(DateTypes);
 
     return struct {
         arena: *ArenaAllocator,
@@ -75,8 +64,6 @@ fn Parser(comptime DateTypes: type) type {
         token_location: ?SourceLocation = null,
         current_token: ?Token = null,
         advance: bool = true,
-        top_level_object: allocation.StructField,
-        slice_finalizers: std.ArrayList(allocation.SliceFinalizer) = .empty,
 
         const Self = @This();
 
@@ -86,14 +73,11 @@ fn Parser(comptime DateTypes: type) type {
             return .{
                 .arena = arena,
                 .scanner = try Scanner.init(reader, alloc),
-                .top_level_object = allocation.StructField.init(alloc),
             };
         }
 
         pub fn deinit(self: *Self) void {
             self.scanner.deinit();
-            self.top_level_object.deinit();
-            self.slice_finalizers.deinit(self.arena.allocator());
         }
 
         fn nextToken(self: *Self, hint: ?Scanner.Hint) Error!Token {
@@ -134,242 +118,110 @@ fn Parser(comptime DateTypes: type) type {
             }
         }
 
-        fn parseTopLevelInto(self: *Self, comptime ObjType: type, dest: *ObjType) Error!void {
+        fn parseDocument(self: *Self) Error!TomlTable {
+            var root_table = TomlTable.empty;
+            var current_table = &root_table;
+
             while (true) {
                 const token = try self.nextToken(.top_level);
                 switch (token.kind) {
-                    .bare_key, .string => try self.processKey(ObjType, dest, token.content, .equal, &self.top_level_object),
-                    .left_bracket => try self.parseTableHeader(ObjType, dest, .right_bracket, &self.top_level_object),
-                    .double_left_bracket => try self.parseTableHeader(ObjType, dest, .double_right_bracket, &self.top_level_object),
+                    .bare_key, .string => {
+                        self.ungetToken();
+                        const result = try self.parseKeyChain(current_table, .equal);
+                        result.value_ptr.* = try self.parseValue();
+                    },
+                    .left_bracket => current_table = try self.parseTableHeader(&root_table, .right_bracket),
+                    .double_left_bracket => current_table = try self.parseTableHeader(&root_table, .double_right_bracket),
                     .line_break => {},
                     .end_of_document => break,
                     else => return error.UnexpectedToken,
                 }
             }
-            for (self.slice_finalizers.items) |finalizer| {
-                finalizer.finalize_fn(finalizer.context, self.arena.allocator());
-            }
+
+            return root_table;
         }
 
-        fn parseTopLevelStruct(self: *Self, comptime T: type) Error!T {
-            if (T == TomlValue) {
-                var table = std.StringHashMapUnmanaged(TomlValue){};
-                self.top_level_object.hashmap_initialized = true;
-                try self.parseTopLevelInto(std.StringHashMapUnmanaged(TomlValue), &table);
-                return TomlValue{ .table = table };
-            }
+        fn parseTableHeader(self: *Self, root_table: *TomlTable, expected_closing_token: TokenKind) Error!*TomlTable {
+            const result = try self.parseKeyChain(root_table, expected_closing_token);
 
-            // TODO: it can be a pointer to a struct or a hashmap of Values.
-            if (@typeInfo(T) != .@"struct") return error.NotStruct;
-
-            var result: T = undefined;
-            try self.parseTopLevelInto(T, &result);
-            return result;
-        }
-
-        fn parseTableHeader(self: *Self, comptime T: type, dest: *T, expected_closing_token: TokenKind, object_info: *allocation.StructField) Error!void {
-            const token = try self.nextToken(null);
-            switch (token.kind) {
-                .bare_key, .string => {
-                    try self.processKey(T, dest, token.content, expected_closing_token, object_info);
+            switch (expected_closing_token) {
+                .right_bracket => {
+                    if (result.found_existing) return error.DuplicateValue;
+                    result.value_ptr.* = TomlValue{ .table = TomlTable.empty };
+                    return &result.value_ptr.table;
                 },
+                .double_right_bracket => {
+                    if (!result.found_existing) result.value_ptr.* = TomlValue{ .array = TomlArray.empty };
+                    try result.value_ptr.array.append(self.arena.allocator(), TomlValue{ .table = TomlTable.empty });
+                    return &result.value_ptr.array.last().?.table;
+                },
+                else => unreachable,
+            }
+        }
+
+        fn parseValue(self: *Self) Error!TomlValue {
+            const token = try self.nextToken(.expect_value);
+            if (debug) std.debug.print("parseValue kind = {}, context = {s} loc = {any}\n", .{ token.kind, token.content, token.location });
+
+            switch (token.kind) {
+                .string, .string_multiline => return TomlValue{ .string = try self.arena.allocator().dupe(u8, token.content) },
+                .integer => return TomlValue{ .integer = try std.fmt.parseInt(i64, token.content, 0) },
+                .float => return TomlValue{ .float = try std.fmt.parseFloat(f64, token.content) },
+                .true => return TomlValue{ .boolean = true },
+                .false => return TomlValue{ .boolean = false },
+
+                .left_bracket => return self.parseArrayValue(),
+                .left_brace => return self.parseInnerTable(),
+
+                .date => return TomlValue{ .date = try DateTypes.parseDate(token.content, self.arena.allocator()) },
+                .time => return TomlValue{ .time = try DateTypes.parseTime(token.content, self.arena.allocator()) },
+                .datetime => return TomlValue{ .datetime = try DateTypes.parseDatetime(token.content, self.arena.allocator()) },
+                .datetime_local => return TomlValue{ .datetime_local = try DateTypes.parseDatetimeLocal(token.content, self.arena.allocator()) },
+
                 else => return error.UnexpectedToken,
             }
         }
 
-        fn parseTableContent(self: *Self, comptime T: type, dest: *T, object_info: *allocation.StructField) Error!void {
-            const ti = @typeInfo(T);
-            if (ti != .@"struct") return error.NotStruct;
+        fn parseInnerTable(self: *Self) Error!TomlValue {
+            var table = TomlTable.empty;
 
             while (true) {
-                const token = try self.nextToken(.top_level);
+                try self.skipLineBreaks(null);
 
-                switch (token.kind) {
-                    .bare_key, .string => try self.processKey(T, dest, token.content, .equal, object_info),
-                    .left_bracket, .double_left_bracket, .end_of_document => {
-                        self.ungetToken();
-                        break;
-                    },
-                    .line_break => {},
-                    else => return error.UnexpectedToken,
-                }
-            }
-        }
-
-        fn parseDatetime(
-            self: *Self,
-            comptime T: type,
-            comptime parseFn: anytype,
-            content: []const u8,
-        ) Error!T {
-            const ParseReturnType = @typeInfo(@TypeOf(parseFn)).@"fn".return_type.?;
-            const return_type_info = @typeInfo(ParseReturnType);
-
-            if (return_type_info == .error_union and return_type_info.error_union.payload == T) {
-                return parseFn(content, self.arena.allocator());
-            }
-
-            return error.InvalidValueType;
-        }
-
-        fn parseValue(self: *Self, comptime ValueType: type, struct_allocation_info: *allocation.StructField) Error!ValueType {
-            const ti = @typeInfo(ValueType);
-
-            const token = try self.nextToken(.expect_value);
-            if (debug) std.debug.print("parseValue kind = {}, context = {s} loc = {any}\n", .{ token.kind, token.content, token.location });
-
-            if (ValueType == TomlValue) {
-                self.ungetToken();
-                switch (token.kind) {
-                    .string, .string_multiline => return TomlValue{ .string = try self.parseValue([]const u8, struct_allocation_info) },
-                    .integer => return TomlValue{ .integer = try self.parseValue(i64, struct_allocation_info) },
-                    .float => return TomlValue{ .float = try self.parseValue(f64, struct_allocation_info) },
-                    .true, .false => return TomlValue{ .boolean = try self.parseValue(bool, struct_allocation_info) },
-
-                    .left_bracket => return TomlValue{ .array = try self.parseValue([]const TomlValue, struct_allocation_info) },
-                    .left_brace => return TomlValue{ .table = try self.parseValue(std.StringHashMapUnmanaged(TomlValue), struct_allocation_info) },
-
-                    .date => return TomlValue{ .date = try self.parseValue(DateTypes.Date, struct_allocation_info) },
-                    .time => return TomlValue{ .time = try self.parseValue(DateTypes.Time, struct_allocation_info) },
-                    .datetime => return TomlValue{ .datetime = try self.parseValue(DateTypes.DateTime, struct_allocation_info) },
-                    .datetime_local => return TomlValue{ .datetime_local = try self.parseValue(DateTypes.DateTimeLocal, struct_allocation_info) },
-
-                    else => return error.UnexpectedToken,
-                }
-            }
-
-            switch (token.kind) {
-                .date => return self.parseDatetime(ValueType, DateTypes.parseDate, token.content),
-                .datetime => return self.parseDatetime(ValueType, DateTypes.parseDatetime, token.content),
-                .datetime_local => return self.parseDatetime(ValueType, DateTypes.parseDatetimeLocal, token.content),
-                .time => return self.parseDatetime(ValueType, DateTypes.parseTime, token.content),
-                else => {},
-            }
-
-            switch (ti) {
-                .int => {
-                    if (token.kind != .integer) return error.InvalidValueType;
-                    return std.fmt.parseInt(ValueType, token.content, 0);
-                },
-                .float => {
-                    if (token.kind != .float) return error.InvalidValueType;
-                    return std.fmt.parseFloat(ValueType, token.content);
-                },
-                .bool => {
-                    switch (token.kind) {
-                        .true => return true,
-                        .false => return false,
-                        else => return error.InvalidValueType,
-                    }
-                },
-                .pointer => |pi| {
-                    if (pi.size == .one) {
-                        self.ungetToken();
-                        const result = try self.arena.allocator().create(pi.child);
-                        result.* = try self.parseInnerTable(pi.child, struct_allocation_info);
-                        return result;
-                    }
-                    switch (pi.child) {
-                        u8 => {
-                            switch (token.kind) {
-                                .string, .string_multiline => {
-                                    return self.arena.allocator().dupe(u8, token.content);
-                                },
-                                else => return error.InvalidValueType,
-                            }
-                        },
-                        else => {
-                            if (token.kind != .left_bracket) return error.UnexpectedToken;
-                            return self.parseArrayValue(pi.child, struct_allocation_info);
-                        },
-                    }
-                },
-                .array => |ti2| {
-                    switch (ti2.child) {
-                        u8 => {
-                            switch (token.kind) {
-                                .string, .string_multiline => {
-                                    var r: ValueType = undefined;
-                                    if (r.len != token.content.len) return error.InvalidValueType;
-                                    @memcpy(&r, token.content);
-                                    return r;
-                                },
-                                else => return error.InvalidValueType,
-                            }
-                        },
-                        else => unreachable,
-                    }
-                },
-                .@"struct" => {
-                    self.ungetToken();
-                    return self.parseInnerTable(ValueType, struct_allocation_info);
-                },
-                .optional => |tinfo| {
-                    if (token.kind == .null)
-                        return @as(ValueType, null);
-
-                    self.ungetToken();
-                    return @as(ValueType, try self.parseValue(tinfo.child, struct_allocation_info));
-                },
-                .@"enum" => {
-                    switch (token.kind) {
-                        .string => {
-                            return std.meta.stringToEnum(ValueType, token.content) orelse return error.InvalidValueType;
-                        },
-                        else => return error.InvalidValueType,
-                    }
-                },
-                .@"union" => return self.processUnionValue(ValueType, token, struct_allocation_info),
-
-                else => {},
-            }
-
-            unreachable;
-        }
-
-        fn parseInnerTable(self: *Self, comptime InnerTableType: type, object_info: *allocation.StructField) Error!InnerTableType {
-            const ti = @typeInfo(InnerTableType);
-            if (ti != .@"struct") return error.NotStruct;
-
-            var result: InnerTableType = undefined;
-
-            if (getHashMapInfo(InnerTableType) != null) {
-                result = .{};
-                object_info.hashmap_initialized = true;
-            }
-
-            var token = try self.nextToken(null);
-            if (token.kind != .left_brace) return error.UnexpectedToken;
-
-            while (true) {
-                token = try self.nextToken(null);
+                var token = try self.nextToken(null);
                 switch (token.kind) {
                     .bare_key, .string => {
-                        try self.processKey(InnerTableType, &result, token.content, .equal, object_info);
-                    },
-                    else => return error.UnexpectedToken,
-                }
+                        const key = try self.arena.allocator().dupe(u8, token.content);
+                        token = try self.nextToken(null);
+                        if (token.kind != .equal) return error.UnexpectedToken;
 
-                token = try self.nextToken(null);
-                switch (token.kind) {
-                    .comma => {},
+                        const val = try self.parseValue();
+                        try table.put(self.arena.allocator(), key, val);
+
+                        try self.skipLineBreaks(null);
+                        token = try self.nextToken(null);
+                        switch (token.kind) {
+                            .comma => {},
+                            .right_brace => break,
+                            else => return error.UnexpectedToken,
+                        }
+                    },
                     .right_brace => break,
                     else => return error.UnexpectedToken,
                 }
             }
-
-            return result;
+            return TomlValue{ .table = table };
         }
 
-        fn parseArrayValue(self: *Self, comptime T: type, object_info: *allocation.StructField) Error![]T {
-            var ar = std.ArrayList(T).empty;
+        fn parseArrayValue(self: *Self) Error!TomlValue {
+            var ar = TomlArray.empty;
             while (true) {
                 try self.skipLineBreaks(.expect_value);
                 var token = try self.nextToken(.expect_value);
                 if (token.kind == .right_bracket) break;
                 self.ungetToken();
 
-                try ar.append(self.arena.allocator(), try self.parseValue(T, object_info));
+                try ar.append(self.arena.allocator(), try self.parseValue());
                 try self.skipLineBreaks(null);
                 token = try self.nextToken(null);
                 switch (token.kind) {
@@ -378,330 +230,37 @@ fn Parser(comptime DateTypes: type) type {
                     else => return error.UnexpectedToken,
                 }
             }
-            return ar.toOwnedSlice(self.arena.allocator());
+            return TomlValue{ .array = ar };
         }
 
-        fn processPointerToOne(
-            self: *Self,
-            comptime ObjectType: type,
-            object: *ObjectType,
-            comptime FieldType: type,
-            comptime field_name: []const u8,
-            expected_closing_token: TokenKind,
-            object_info: *allocation.StructField,
-        ) Error!void {
-            const result = try object_info.fields.getOrPut(field_name);
-            if (!result.found_existing) {
-                if (debug) std.debug.print("== initializing .one {s}\n", .{field_name});
-                @field(object, field_name) = try self.arena.allocator().create(FieldType);
+        fn parseKeyChain(self: *Self, table: *TomlTable, expected_closing_token: TokenKind) Error!TomlTable.GetOrPutResult {
+            const alloc = self.arena.allocator();
+            var token = try self.nextToken(null);
+            if (token.kind != .string and token.kind != .bare_key) return error.UnexpectedToken;
 
-                result.value_ptr.* = allocation.AllocatedStructField{ .object = allocation.StructField.init(self.arena.allocator()) };
-            }
+            const key = token.content;
+            const result = try table.getOrPut(alloc, key);
+            if (!result.found_existing) result.key_ptr.* = try alloc.dupe(u8, key);
 
-            try self.processAfterKey(FieldType, @field(object, field_name), expected_closing_token, &result.value_ptr.object);
-        }
-
-        fn processPointerToLastElement(
-            self: *Self,
-            comptime FieldType: type,
-            comptime field_name: []const u8,
-            expected_closing_token: TokenKind,
-            object_info: *allocation.StructField,
-        ) Error!void {
-            const FieldValueArrayList = std.ArrayList(FieldType);
-            const entry = object_info.fields.getEntry(field_name) orelse return error.UnexpectedToken;
-            var ar: *FieldValueArrayList = @ptrCast(@alignCast(entry.value_ptr.array.field_values_array_list));
-            const last_value_ptr = &ar.items[ar.items.len - 1];
-            const last_obj_info = &entry.value_ptr.array.objects.items[entry.value_ptr.array.objects.items.len - 1].object;
-            try self.processAfterKey(FieldType, last_value_ptr, expected_closing_token, last_obj_info);
-        }
-
-        fn processPointerToMany(
-            self: *Self,
-            comptime ObjectType: type,
-            dest: *ObjectType,
-            comptime FieldType: type,
-            comptime field_name: []const u8,
-            expected_closing_token: TokenKind,
-            object_info: *allocation.StructField,
-        ) Error!void {
-            const FieldValueArrayList = std.ArrayList(FieldType);
-            const result = try object_info.fields.getOrPut(field_name);
-            if (!result.found_existing) {
-                const list = try self.arena.allocator().create(FieldValueArrayList);
-                list.* = FieldValueArrayList.empty;
-
-                result.value_ptr.* = allocation.AllocatedStructField{ .array = allocation.ArrayField.init(self.arena.allocator(), @ptrCast(list)) };
-
-                // Register finalizer to set dest field to toOwnedSlice
-                const finalizer = try allocation.SliceFinalizer.init(
-                    ObjectType,
-                    FieldType,
-                    field_name,
-                    dest,
-                    result.value_ptr.array.field_values_array_list,
-                    self.arena.allocator(),
-                );
-
-                try self.slice_finalizers.append(self.arena.allocator(), finalizer);
-            }
-
-            var ar: *FieldValueArrayList = @ptrCast(@alignCast(result.value_ptr.array.field_values_array_list));
-            const value_ptr = try ar.addOne(self.arena.allocator());
-
-            // TODO: how do we know that it's AllocatedStructField? It can be another array.
-            try result.value_ptr.array.objects.append(self.arena.allocator(), allocation.AllocatedStructField{ .object = allocation.StructField.init(self.arena.allocator()) });
-
-            try self.processAfterKey(FieldType, value_ptr, expected_closing_token, &result.value_ptr.array.objects.items[result.value_ptr.array.objects.items.len - 1].object);
-        }
-
-        fn processUnionValue(
-            self: *Self,
-            comptime ObjectType: type,
-            token: Token,
-            object_info: *allocation.StructField,
-        ) Error!ObjectType {
-            const union_info = @typeInfo(ObjectType).@"union";
-
-            switch (token.kind) {
-                // For void-payload unions, accept a string as the tag name
-                .string => {
-                    inline for (union_info.fields) |field| {
-                        if (std.mem.eql(u8, field.name, token.content)) {
-                            if (field.type == void) {
-                                return @unionInit(ObjectType, field.name, {});
-                            } else break;
-                        }
-                    }
-                },
-                // For non-void payload unions, parse as inline table with single field
-                .left_brace => {
-                    const key_token = try self.nextToken(null);
-                    if (key_token.kind != .bare_key and key_token.kind != .string) return error.UnexpectedToken;
-
-                    inline for (union_info.fields) |field| {
-                        if (std.mem.eql(u8, field.name, key_token.content)) {
-                            const eq_token = try self.nextToken(null);
-                            if (eq_token.kind != .equal) return error.UnexpectedToken;
-
-                            const val = try self.parseValue(field.type, object_info);
-
-                            const close_token = try self.nextToken(null);
-                            if (close_token.kind != .right_brace) return error.UnexpectedToken;
-
-                            return @unionInit(ObjectType, field.name, val);
-                        }
-                    }
-                },
-                else => {},
-            }
-            return error.InvalidValueType;
-        }
-
-        fn processUnionTagKey(
-            self: *Self,
-            comptime ObjectType: type,
-            dest: *ObjectType,
-            comptime UnionType: type,
-            comptime field_name: []const u8,
-            expected_closing_token: TokenKind,
-            object_info: *allocation.StructField,
-        ) Error!void {
-            const union_info = @typeInfo(UnionType).@"union";
-
-            const union_tag_token = try self.nextToken(null);
-            if (union_tag_token.kind != .bare_key and union_tag_token.kind != .string) {
-                return error.UnexpectedToken;
-            }
-
-            inline for (union_info.fields) |union_field| {
-                if (std.mem.eql(u8, union_field.name, union_tag_token.content)) {
-                    const tag_name = union_tag_token.content;
-
-                    if (object_info.fields.contains(field_name)) {
-                        // Assert it's the same tag as before
-                        const active_tag_name = @tagName(std.meta.activeTag(@field(dest, field_name)));
-                        if (!std.mem.eql(u8, active_tag_name, tag_name)) return error.InvalidValueType;
-                    } else {
-                        // Set the union to the correct tag if not already set
-                        @field(dest, field_name) = @unionInit(UnionType, union_field.name, undefined);
-                    }
-
-                    const obj_info = try object_info.markAsObject(field_name);
-                    return self.processAfterKey(
-                        union_field.type,
-                        &@field(@field(dest, field_name), union_field.name),
-                        expected_closing_token,
-                        obj_info,
-                    );
-                }
-            }
-            return error.UnexpectedToken;
-        }
-
-        fn processKey(
-            self: *Self,
-            comptime ObjectType: type,
-            object: *ObjectType,
-            key: []const u8,
-            expected_closing_token: TokenKind,
-            object_info: *allocation.StructField,
-        ) Error!void {
-            // Handle types with a put method (like StringHashMapUnmanaged)
-            if (getHashMapInfo(ObjectType)) |ValueType| {
-                var val: ValueType = undefined;
-                if (object_info.hashmap_initialized) {
-                    if (object.get(key)) |existing| val = existing;
-                }
-                const key_copy = try self.arena.allocator().dupe(u8, key);
-                const obj_info = try object_info.markAsObject(key_copy);
-                try self.processAfterKey(ValueType, &val, expected_closing_token, obj_info);
-                if (debug) std.debug.print("== type = {s}, key = {s}, val = {any}\n", .{ @typeName(ValueType), key_copy, val });
-                if (!object_info.hashmap_initialized) {
-                    if (debug) std.debug.print("== initializing\n", .{});
-                    object_info.hashmap_initialized = true;
-                    object.* = .{};
-                }
-                try object.put(self.arena.allocator(), key_copy, val);
-
-                return;
-            }
-            const dest_type_info = @typeInfo(ObjectType);
-            inline for (dest_type_info.@"struct".fields) |field| {
-                if (std.mem.eql(u8, field.name, key))
-                    return self.processKeyMatchedField(ObjectType, object, field, expected_closing_token, object_info);
-            }
-
-            return error.UnexpectedToken;
-        }
-
-        fn processKeyMatchedField(
-            self: *Self,
-            comptime ObjectType: type,
-            object: *ObjectType,
-            field: std.builtin.Type.StructField,
-            expected_closing_token: TokenKind,
-            alloc_info: *allocation.StructField,
-        ) Error!void {
-            const field_type_info = @typeInfo(field.type);
-            switch (field_type_info) {
-                .pointer => {
-                    switch (field_type_info.pointer.size) {
-                        .one => return self.processPointerToOne(ObjectType, object, field_type_info.pointer.child, field.name, expected_closing_token, alloc_info),
-                        .slice => {},
-                        else => unreachable,
-                    }
-                    switch (field_type_info.pointer.child) {
-                        u8 => {},
-                        else => {
-                            const next_kind = try self.peekNextTokenKind(expected_closing_token);
-                            if (next_kind != .equal) {
-                                if (next_kind == .dot) {
-                                    // [a.b.c] where b is []T: per TOML spec, navigate into the last element.
-                                    return self.processPointerToLastElement(field_type_info.pointer.child, field.name, expected_closing_token, alloc_info);
-                                }
-                                return self.processPointerToMany(ObjectType, object, field_type_info.pointer.child, field.name, expected_closing_token, alloc_info);
-                            }
-                        },
-                    }
-                },
-                // Handle union types with dotted notation (e.g., union1.tag_name = 42)
-                // TomlValue is excluded: dotted access on it navigates into a table, not a union tag.
-                .@"union" => {
-                    if (field.type != TomlValue) {
-                        const next_token = try self.nextToken(null);
-                        if (next_token.kind == .dot) {
-                            return self.processUnionTagKey(ObjectType, object, field.type, field.name, expected_closing_token, alloc_info);
-                        } else {
-                            self.ungetToken();
-                        }
-                    }
-                },
-                else => {},
-            }
-
-            const obj_info = try alloc_info.markAsObject(field.name);
-            return self.processAfterKey(field.type, &@field(object, field.name), expected_closing_token, obj_info);
-        }
-
-        fn processAfterKey(
-            self: *Self,
-            comptime ValueType: type,
-            value_ptr: *ValueType,
-            expected_closing_token: TokenKind,
-            object_info: *allocation.StructField,
-        ) Error!void {
             const hint: ?Scanner.Hint = if (expected_closing_token == .double_right_bracket) .after_double_bracket else null;
-            const token = try self.nextToken(hint);
+            token = try self.nextToken(hint);
 
             switch (token.kind) {
                 .dot => {
-                    const after_dot_token = try self.nextToken(null);
-                    if (after_dot_token.kind != .bare_key and after_dot_token.kind != .string) return error.UnexpectedToken;
-
-                    if (ValueType == TomlValue) {
-                        if (value_ptr.* == .array) {
-                            const TomlValueArrayList = std.ArrayList(TomlValue);
-                            const list: *TomlValueArrayList = @ptrCast(@alignCast(object_info.opaque_array_list.?));
-                            const last = &list.items[list.items.len - 1];
-                            const elem_info = object_info.array_last_element_info.?;
-                            try self.processKey(std.StringHashMapUnmanaged(TomlValue), &last.table, after_dot_token.content, expected_closing_token, elem_info);
-                        } else {
-                            if (!object_info.hashmap_initialized) {
-                                object_info.hashmap_initialized = true;
-                                value_ptr.* = TomlValue{ .table = std.StringHashMapUnmanaged(TomlValue).empty };
-                            }
-                            try self.processKey(std.StringHashMapUnmanaged(TomlValue), &value_ptr.table, after_dot_token.content, expected_closing_token, object_info);
-                        }
-                    } else {
-                        if (@typeInfo(ValueType) != .@"struct") return error.UnexpectedToken;
-                        try self.processKey(ValueType, value_ptr, after_dot_token.content, expected_closing_token, object_info);
+                    if (!result.found_existing) {
+                        result.value_ptr.* = TomlValue{ .table = TomlTable.empty };
+                    }
+                    switch (result.value_ptr.*) {
+                        .table => |*tab| return self.parseKeyChain(tab, expected_closing_token),
+                        .array => |ar| return self.parseKeyChain(&ar.last().?.table, expected_closing_token),
+                        else => unreachable,
                     }
                 },
-                .equal => {
-                    value_ptr.* = try self.parseValue(ValueType, object_info);
-                },
-                .right_bracket => {
-                    if (ValueType == TomlValue) {
-                        if (!object_info.hashmap_initialized) {
-                            object_info.hashmap_initialized = true;
-                            value_ptr.* = TomlValue{ .table = std.StringHashMapUnmanaged(TomlValue).empty };
-                        }
-                        try self.parseTableContent(std.StringHashMapUnmanaged(TomlValue), &value_ptr.table, object_info);
-                    } else {
-                        try self.parseTableContent(ValueType, value_ptr, object_info);
-                    }
-                },
-                .double_right_bracket => {
-                    if (ValueType == TomlValue) {
-                        const TomlValueArrayList = std.ArrayList(TomlValue);
-                        const alloc = self.arena.allocator();
-
-                        const list: *TomlValueArrayList = if (object_info.opaque_array_list) |p|
-                            @ptrCast(@alignCast(p))
-                        else blk: {
-                            const l = try alloc.create(TomlValueArrayList);
-                            l.* = TomlValueArrayList.empty;
-                            object_info.opaque_array_list = l;
-                            break :blk l;
-                        };
-
-                        const new_elem_info = try alloc.create(allocation.StructField);
-                        new_elem_info.* = allocation.StructField.init(alloc);
-                        new_elem_info.hashmap_initialized = true;
-                        object_info.array_last_element_info = new_elem_info;
-
-                        const slot = try list.addOne(alloc);
-                        slot.* = TomlValue{ .table = std.StringHashMapUnmanaged(TomlValue).empty };
-                        try self.parseTableContent(std.StringHashMapUnmanaged(TomlValue), &slot.table, new_elem_info);
-
-                        value_ptr.* = TomlValue{ .array = list.items };
-                    } else {
-                        try self.parseTableContent(ValueType, value_ptr, object_info);
-                    }
-                },
+                .equal, .right_bracket, .double_right_bracket => {},
                 else => return error.UnexpectedToken,
             }
+
+            return result;
         }
     };
 }
