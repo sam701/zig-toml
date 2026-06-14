@@ -5,7 +5,7 @@ pub fn build(b: *std.Build) void {
     const targetOpt = b.standardTargetOptions(.{});
 
     const module = b.addModule("toml", .{
-        .root_source_file = b.path("src/root2.zig"),
+        .root_source_file = b.path("src/root.zig"),
         .target = targetOpt,
         .optimize = optimizeOpt,
     });

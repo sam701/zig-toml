@@ -1,7 +1,7 @@
 const std = @import("std");
 
-const parser = @import("./parser2.zig");
-const value = @import("./value2.zig");
+const parser = @import("./parser.zig");
+const value = @import("./value.zig");
 // pub const serialize = @import("serialize/root.zig").serialize;
 
 pub const parse = parser.parse;
@@ -14,5 +14,5 @@ pub const DefaultDateTypes = value.DefaultDateTypes;
 pub const ValueError = value.Error;
 
 test {
-    _ = @import("./tests2.zig");
+    _ = @import("./tests.zig");
 }

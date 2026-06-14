@@ -3,10 +3,10 @@ const expect = std.testing.expect;
 const expectEqual = std.testing.expectEqual;
 const expectEqualStrings = std.testing.expectEqualStrings;
 const expectEqualSlices = std.testing.expectEqualSlices;
-const value = @import("./value2.zig");
+const value = @import("./value.zig");
 const Value = value.Value(value.DefaultDateTypes);
 
-const parse = @import("./parser2.zig").parse;
+const parse = @import("./parser.zig").parse;
 
 const MainStruct = struct {
     i1: i64,

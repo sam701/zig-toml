@@ -6,7 +6,7 @@ const Reader = std.Io.Reader;
 const Allocator = std.mem.Allocator;
 const ArenaAllocator = std.heap.ArenaAllocator;
 const SourceLocation = @import("./scanner/source.zig").SourceLocation;
-const value = @import("./value2.zig");
+const value = @import("./value.zig");
 
 pub const Parsed = std.json.Parsed;
 pub const Error = Scanner.Error || std.fmt.ParseIntError || std.fmt.ParseFloatError || std.mem.Allocator.Error || value.Error || error{
