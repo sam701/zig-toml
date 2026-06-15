@@ -146,8 +146,7 @@ fn Parser(comptime DateTypes: type) type {
 
             switch (expected_closing_token) {
                 .right_bracket => {
-                    if (result.found_existing) return error.DuplicateValue;
-                    result.value_ptr.* = TomlValue{ .table = TomlTable.empty };
+                    if (!result.found_existing) result.value_ptr.* = TomlValue{ .table = TomlTable.empty };
                     return &result.value_ptr.table;
                 },
                 .double_right_bracket => {
@@ -171,7 +170,7 @@ fn Parser(comptime DateTypes: type) type {
                 .false => return TomlValue{ .boolean = false },
 
                 .left_bracket => return self.parseArrayValue(),
-                .left_brace => return self.parseInnerTable(),
+                .left_brace => return self.parseInlineTable(),
 
                 .date => return TomlValue{ .date = try DateTypes.parseDate(token.content, self.arena.allocator()) },
                 .time => return TomlValue{ .time = try DateTypes.parseTime(token.content, self.arena.allocator()) },
@@ -182,7 +181,7 @@ fn Parser(comptime DateTypes: type) type {
             }
         }
 
-        fn parseInnerTable(self: *Self) Error!TomlValue {
+        fn parseInlineTable(self: *Self) Error!TomlValue {
             var table = TomlTable.empty;
 
             while (true) {
@@ -191,12 +190,9 @@ fn Parser(comptime DateTypes: type) type {
                 var token = try self.nextToken(null);
                 switch (token.kind) {
                     .bare_key, .string => {
-                        const key = try self.arena.allocator().dupe(u8, token.content);
-                        token = try self.nextToken(null);
-                        if (token.kind != .equal) return error.UnexpectedToken;
-
-                        const val = try self.parseValue();
-                        try table.put(self.arena.allocator(), key, val);
+                        self.ungetToken();
+                        const result = try self.parseKeyChain(&table, .equal);
+                        result.value_ptr.* = try self.parseValue();
 
                         try self.skipLineBreaks(null);
                         token = try self.nextToken(null);
@@ -247,6 +243,8 @@ fn Parser(comptime DateTypes: type) type {
 
             switch (token.kind) {
                 .dot => {
+                    if (debug) std.debug.print("parseKeyChain.dot key={s} found_existing={any}\n", .{ key, result.found_existing });
+
                     if (!result.found_existing) {
                         result.value_ptr.* = TomlValue{ .table = TomlTable.empty };
                     }
