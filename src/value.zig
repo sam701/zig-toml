@@ -1,27 +1,4 @@
 const std = @import("std");
-const Allocator = std.mem.Allocator;
-
-pub const Error = Allocator.Error || error{InvalidDateTime};
-
-pub const DefaultDateTypes = struct {
-    pub const Date = []const u8;
-    pub const Time = []const u8;
-    pub const DateTime = []const u8;
-    pub const DateTimeLocal = []const u8;
-
-    pub fn parseDate(str: []const u8, alloc: Allocator) Error!Date {
-        return alloc.dupe(u8, str);
-    }
-    pub fn parseDatetime(str: []const u8, alloc: Allocator) Error!DateTime {
-        return alloc.dupe(u8, str);
-    }
-    pub fn parseDatetimeLocal(str: []const u8, alloc: Allocator) Error!DateTimeLocal {
-        return alloc.dupe(u8, str);
-    }
-    pub fn parseTime(str: []const u8, alloc: Allocator) Error!Time {
-        return alloc.dupe(u8, str);
-    }
-};
 
 pub fn Table(comptime DateTypes: type) type {
     return std.StringHashMapUnmanaged(Value(DateTypes));

@@ -7,9 +7,11 @@ const Allocator = std.mem.Allocator;
 const ArenaAllocator = std.heap.ArenaAllocator;
 const SourceLocation = @import("./scanner/source.zig").SourceLocation;
 const value = @import("./value.zig");
+const datetime = @import("./datetime.zig");
+const DefaultDateTypes = datetime.Simple;
 
 pub const Parsed = std.json.Parsed;
-pub const Error = Scanner.Error || std.fmt.ParseIntError || std.fmt.ParseFloatError || std.mem.Allocator.Error || value.Error || error{
+pub const Error = Scanner.Error || std.fmt.ParseIntError || std.fmt.ParseFloatError || std.mem.Allocator.Error || datetime.Error || error{
     UnexpectedToken,
     NotStruct,
     InvalidValueType,
@@ -27,7 +29,7 @@ const debug = false;
 /// Parse TOML from a reader into type T.
 /// Datetime values (date, datetime, datetime-local, time) are returned as strings.
 pub fn parse(comptime T: type, reader: *Reader, alloc: Allocator) Error!Parsed(T) {
-    return parseWith(T, reader, alloc, value.DefaultDateTypes);
+    return parseWith(T, reader, alloc, DefaultDateTypes);
 }
 
 /// Parse TOML from a reader into type T with a custom datetime parser.

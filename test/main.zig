@@ -2,9 +2,9 @@ const std = @import("std");
 const Io = std.Io;
 const toml = @import("toml");
 
-const TomlValue = toml.Value(toml.DefaultDateTypes);
-const TomlTable = toml.Table(toml.DefaultDateTypes);
-const TomlArray = toml.Array(toml.DefaultDateTypes);
+const TomlValue = toml.Value(toml.DateTimesSimple);
+const TomlTable = toml.Table(toml.DateTimesSimple);
+const TomlArray = toml.Array(toml.DateTimesSimple);
 
 pub fn main(init: std.process.Init) !void {
     const io = init.io;
@@ -42,10 +42,22 @@ fn writeValue(v: *const TomlValue, w: *Io.Writer) Io.Writer.Error!void {
             try writeTagged("float", s, w);
         },
         .boolean => |b| try writeTagged("bool", if (b) "true" else "false", w),
-        .datetime => |s| try writeTagged("datetime", s, w),
-        .datetime_local => |s| try writeTagged("datetime-local", s, w),
-        .date => |s| try writeTagged("date-local", s, w),
-        .time => |s| try writeTagged("time-local", s, w),
+        .datetime => |dt| {
+            var buf: [64]u8 = undefined;
+            try writeTagged("datetime", formatDatetime(dt, &buf), w);
+        },
+        .datetime_local => |dt| {
+            var buf: [48]u8 = undefined;
+            try writeTagged("datetime-local", formatDatetimeLocal(dt, &buf), w);
+        },
+        .date => |d| {
+            var buf: [16]u8 = undefined;
+            try writeTagged("date-local", formatDate(d, &buf), w);
+        },
+        .time => |t| {
+            var buf: [32]u8 = undefined;
+            try writeTagged("time-local", formatTime(t, &buf), w);
+        },
     }
 }
 
@@ -98,6 +110,41 @@ fn writeJsonString(s: []const u8, w: *Io.Writer) !void {
         }
     }
     try w.writeByte('"');
+}
+
+fn formatDate(d: toml.DateTimesSimple.Date, buf: []u8) []const u8 {
+    return std.fmt.bufPrint(buf, "{d:0>4}-{d:0>2}-{d:0>2}", .{ d.year, d.month, d.day }) catch unreachable;
+}
+
+fn formatTime(t: toml.DateTimesSimple.Time, buf: []u8) []const u8 {
+    if (t.nanosecond != 0) {
+        return std.fmt.bufPrint(buf, "{d:0>2}:{d:0>2}:{d:0>2}.{d}", .{ t.hour, t.minute, t.second, t.nanosecond }) catch unreachable;
+    }
+    return std.fmt.bufPrint(buf, "{d:0>2}:{d:0>2}:{d:0>2}", .{ t.hour, t.minute, t.second }) catch unreachable;
+}
+
+fn formatDatetime(dt: toml.DateTimesSimple.DateTime, buf: []u8) []const u8 {
+    var date_buf: [16]u8 = undefined;
+    var time_buf: [32]u8 = undefined;
+    const date_s = formatDate(dt.date, &date_buf);
+    const time_s = formatTime(dt.time, &time_buf);
+    if (dt.offset_minutes) |offset| {
+        if (offset == 0) {
+            return std.fmt.bufPrint(buf, "{s}T{s}Z", .{ date_s, time_s }) catch unreachable;
+        }
+        const sign: u8 = if (offset > 0) '+' else '-';
+        const abs_off: u16 = @intCast(@abs(offset));
+        return std.fmt.bufPrint(buf, "{s}T{s}{c}{d:0>2}:{d:0>2}", .{ date_s, time_s, sign, abs_off / 60, abs_off % 60 }) catch unreachable;
+    }
+    return std.fmt.bufPrint(buf, "{s}T{s}", .{ date_s, time_s }) catch unreachable;
+}
+
+fn formatDatetimeLocal(dt: toml.DateTimesSimple.DateTimeLocal, buf: []u8) []const u8 {
+    var date_buf: [16]u8 = undefined;
+    var time_buf: [32]u8 = undefined;
+    const date_s = formatDate(dt.date, &date_buf);
+    const time_s = formatTime(dt.time, &time_buf);
+    return std.fmt.bufPrint(buf, "{s}T{s}", .{ date_s, time_s }) catch unreachable;
 }
 
 fn formatFloat(f: f64, buf: []u8) []const u8 {

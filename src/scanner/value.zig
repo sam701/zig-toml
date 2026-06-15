@@ -44,8 +44,8 @@ pub fn scan(source: *Source, content_writer: *Writer) Error!TokenKind {
 
     const buf = content_writer.buffered();
     if (buf.len == 10 and buf[4] == '-') return .date;
-    if (buf.len >= 8 and buf[2] == ':') return .time;
-    if (buf.len >= 19 and (buf[10] == 'T' or buf[10] == 't' or buf[10] == ' ')) {
+    if (buf.len >= 5 and buf[2] == ':') return .time;
+    if (buf.len >= 16 and (buf[10] == 'T' or buf[10] == 't' or buf[10] == ' ')) {
         const tz = buf[buf.len - 6];
         if (buf[buf.len - 1] == 'Z' or buf[buf.len - 1] == 'z' or tz == '-' or tz == '+')
             return .datetime
