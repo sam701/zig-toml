@@ -43,23 +43,33 @@ pub const Simple = struct {
     pub const DateTimeLocal = DateTime;
 
     pub fn parseDate(str: []const u8, _: Allocator) Error!Date {
-        return Date{
+        const d = Date{
             .year = std.fmt.parseInt(u16, str[0..4], 10) catch return error.InvalidDateTime,
             .month = std.fmt.parseInt(u4, str[5..7], 10) catch return error.InvalidDateTime,
             .day = std.fmt.parseInt(u5, str[8..10], 10) catch return error.InvalidDateTime,
         };
+        if (d.month < 1 or d.month > 12) return error.InvalidDateTime;
+        if (d.day < 1 or d.day > 31) return error.InvalidDateTime;
+        if (d.month == 2 and (d.day > 29 or (d.day == 29 and !isLeapYear(d.year)))) return error.InvalidDateTime;
+        return d;
     }
     pub fn parseTime(str: []const u8, _: Allocator) Error!Time {
         var t = Time{
             .hour = std.fmt.parseInt(u5, str[0..2], 10) catch return error.InvalidDateTime,
             .minute = std.fmt.parseInt(u6, str[3..5], 10) catch return error.InvalidDateTime,
         };
+        if (str.len == 7) return error.InvalidDateTime;
         if (str.len >= 8) {
             t.second = std.fmt.parseInt(u6, str[6..8], 10) catch return error.InvalidDateTime;
         }
+        if (str.len == 9) return error.InvalidDateTime;
         if (str.len > 9) {
             t.nanosecond = std.fmt.parseInt(u30, str[9..str.len], 10) catch return error.InvalidDateTime;
         }
+
+        if (t.hour > 23) return error.InvalidDateTime;
+        if (t.minute > 59) return error.InvalidDateTime;
+        if (t.second > 59) return error.InvalidDateTime;
         return t;
     }
     pub fn parseDatetime(str: []const u8, alloc: Allocator) Error!DateTime {
@@ -95,5 +105,12 @@ fn parseOffset(str: []const u8) Error!i16 {
     const hour = std.fmt.parseInt(i16, str[1..3], 10) catch return error.InvalidDateTime;
     const minutes = std.fmt.parseInt(i16, str[4..6], 10) catch return error.InvalidDateTime;
 
+    if (hour < 0 or hour > 23) return error.InvalidDateTime;
+    if (minutes < 0 or minutes > 59) return error.InvalidDateTime;
+
     return sign * (hour * 60 + minutes);
+}
+
+fn isLeapYear(year: u16) bool {
+    return (year % 4 == 0 and year % 100 != 0) or (year % 400 == 0);
 }
