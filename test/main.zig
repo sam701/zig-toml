@@ -28,7 +28,7 @@ pub fn main(init: std.process.Init) !void {
 
 fn writeValue(v: *const TomlValue, w: *Io.Writer) Io.Writer.Error!void {
     switch (v.*) {
-        .table => |*t| try writeTable(t, w),
+        .table => |t| try writeTable(&t.data, w),
         .array => |arr| try writeArray(&arr, w),
         .string => |s| try writeTagged("string", s, w),
         .integer => |i| {
@@ -77,7 +77,7 @@ fn writeTable(t: *const std.StringHashMapUnmanaged(TomlValue), w: *Io.Writer) Io
 
 fn writeArray(arr: *const TomlArray, w: *Io.Writer) Io.Writer.Error!void {
     try w.writeByte('[');
-    for (arr.items, 0..) |*item, i| {
+    for (arr.data.items, 0..) |*item, i| {
         if (i != 0) try w.writeByte(',');
         try writeValue(item, w);
     }

@@ -16,6 +16,7 @@ pub const Error = Scanner.Error || std.fmt.ParseIntError || std.fmt.ParseFloatEr
     NotStruct,
     InvalidValueType,
     DuplicateValue,
+    InvalidToml,
 };
 
 const debug = false;
@@ -121,7 +122,7 @@ fn Parser(comptime DateTypes: type) type {
         }
 
         fn parseDocument(self: *Self) Error!TomlTable {
-            var root_table = TomlTable.empty;
+            var root_table = TomlTable.init(.implicit);
             var current_table = &root_table;
 
             while (true) {
@@ -148,13 +149,17 @@ fn Parser(comptime DateTypes: type) type {
 
             switch (expected_closing_token) {
                 .right_bracket => {
-                    if (!result.found_existing) result.value_ptr.* = TomlValue{ .table = TomlTable.empty };
+                    if (result.found_existing) {
+                        if (result.value_ptr.* != .table) return error.InvalidToml;
+                    } else result.value_ptr.* = TomlValue{ .table = TomlTable.init(.header) };
                     return &result.value_ptr.table;
                 },
                 .double_right_bracket => {
-                    if (!result.found_existing) result.value_ptr.* = TomlValue{ .array = TomlArray.empty };
-                    try result.value_ptr.array.append(self.arena.allocator(), TomlValue{ .table = TomlTable.empty });
-                    return &result.value_ptr.array.last().?.table;
+                    if (result.found_existing) {
+                        if (result.value_ptr.* != .array) return error.InvalidToml;
+                    } else result.value_ptr.* = TomlValue{ .array = TomlArray.init(.header) };
+                    try result.value_ptr.array.data.append(self.arena.allocator(), TomlValue{ .table = TomlTable.init(.header) });
+                    return &result.value_ptr.array.data.last().?.table;
                 },
                 else => unreachable,
             }
@@ -184,7 +189,7 @@ fn Parser(comptime DateTypes: type) type {
         }
 
         fn parseInlineTable(self: *Self) Error!TomlValue {
-            var table = TomlTable.empty;
+            var table = TomlTable.init(.inlined);
 
             while (true) {
                 try self.skipLineBreaks(null);
@@ -212,14 +217,14 @@ fn Parser(comptime DateTypes: type) type {
         }
 
         fn parseArrayValue(self: *Self) Error!TomlValue {
-            var ar = TomlArray.empty;
+            var ar = TomlArray.init(.inlined);
             while (true) {
                 try self.skipLineBreaks(.expect_value);
                 var token = try self.nextToken(.expect_value);
                 if (token.kind == .right_bracket) break;
                 self.ungetToken();
 
-                try ar.append(self.arena.allocator(), try self.parseValue());
+                try ar.data.append(self.arena.allocator(), try self.parseValue());
                 try self.skipLineBreaks(null);
                 token = try self.nextToken(null);
                 switch (token.kind) {
@@ -237,8 +242,26 @@ fn Parser(comptime DateTypes: type) type {
             if (token.kind != .string and token.kind != .bare_key) return error.UnexpectedToken;
 
             const key = token.content;
-            const result = try table.getOrPut(alloc, key);
-            if (!result.found_existing) result.key_ptr.* = try alloc.dupe(u8, key);
+            const result = try table.data.getOrPut(alloc, key);
+            if (result.found_existing) {
+                switch (expected_closing_token) {
+                    .equal => {
+                        switch (result.value_ptr.*) {
+                            .array => return error.InvalidToml,
+                            .table => |x| if (x.definition == .header) return error.InvalidToml,
+                            else => {},
+                        }
+                    },
+                    .right_bracket, .double_right_bracket => {
+                        switch (result.value_ptr.*) {
+                            .array => |x| if (x.definition == .inlined) return error.InvalidToml,
+                            .table => |x| if (x.definition == .inlined) return error.InvalidToml,
+                            else => {},
+                        }
+                    },
+                    else => {},
+                }
+            } else result.key_ptr.* = try alloc.dupe(u8, key);
 
             const hint: ?Scanner.Hint = if (expected_closing_token == .double_right_bracket) .after_double_bracket else null;
             token = try self.nextToken(hint);
@@ -247,12 +270,10 @@ fn Parser(comptime DateTypes: type) type {
                 .dot => {
                     if (debug) std.debug.print("parseKeyChain.dot key={s} found_existing={any}\n", .{ key, result.found_existing });
 
-                    if (!result.found_existing) {
-                        result.value_ptr.* = TomlValue{ .table = TomlTable.empty };
-                    }
+                    if (!result.found_existing) result.value_ptr.* = TomlValue{ .table = TomlTable.init(.implicit) };
                     switch (result.value_ptr.*) {
                         .table => |*tab| return self.parseKeyChain(tab, expected_closing_token),
-                        .array => |ar| return self.parseKeyChain(&ar.last().?.table, expected_closing_token),
+                        .array => |ar| return self.parseKeyChain(&ar.data.last().?.table, expected_closing_token),
                         else => unreachable,
                     }
                 },

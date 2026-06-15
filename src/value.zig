@@ -1,12 +1,40 @@
 const std = @import("std");
 
 pub fn Table(comptime DateTypes: type) type {
-    return std.StringHashMapUnmanaged(Value(DateTypes));
+    return struct {
+        definition: Definition,
+        data: std.StringHashMapUnmanaged(Value(DateTypes)),
+
+        const Self = @This();
+
+        pub fn init(def: Definition) Self {
+            return Self{
+                .definition = def,
+                .data = .empty,
+            };
+        }
+
+        pub const GetOrPutResult = std.StringHashMapUnmanaged(Value(DateTypes)).GetOrPutResult;
+    };
 }
 
 pub fn Array(comptime DateTypes: type) type {
-    return std.ArrayList(Value(DateTypes));
+    return struct {
+        definition: Definition,
+        data: std.ArrayList(Value(DateTypes)),
+
+        const Self = @This();
+
+        pub fn init(def: Definition) Self {
+            return Self{
+                .definition = def,
+                .data = .empty,
+            };
+        }
+    };
 }
+
+pub const Definition = enum { header, inlined, implicit };
 
 pub fn Value(comptime DateTypes: type) type {
     return union(enum) {
