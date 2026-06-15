@@ -6,6 +6,8 @@ const test_alloc = std.testing.allocator;
 const testing = std.testing;
 const expectEqual = std.testing.expectEqual;
 
+const debug = false;
+
 pub const SourceLocation = struct {
     line: usize = 0,
     column: usize = 0,
@@ -43,6 +45,7 @@ pub const Source = struct {
     pub fn next(self: *Self) Error!?u8 {
         if (!self.advance) {
             self.advance = true;
+            if (debug) std.log.debug("scanner: next (current): c={c}", .{self.current.?});
             return self.current;
         }
 
@@ -53,6 +56,7 @@ pub const Source = struct {
 
             self.current = v;
 
+            if (debug) std.log.debug("scanner: next: c={c}", .{v});
             return v;
         } else |err| {
             return if (err == error.EndOfStream) null else err;
@@ -68,6 +72,7 @@ pub const Source = struct {
     }
 
     pub fn prev(self: *Self) void {
+        if (debug) std.log.debug("scanner: prev", .{});
         self.advance = false;
     }
 };

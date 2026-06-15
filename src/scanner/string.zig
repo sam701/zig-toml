@@ -29,40 +29,66 @@ const StringScanner = struct {
     source: *Source,
     delimiter: Delimiter,
     content_writer: *Writer,
+    last_backslash_index: ?usize = null,
 
     fn scan(self: *StringScanner) Error!void {
-        // std.debug.print("current={c}\n", .{self.source.current.?});
+        // std.log.debug("current={}", .{self.source.current.?});
         var delimiter_counter: usize = 0;
         while (try self.source.next()) |c| {
             // std.debug.print("cx={c}, del={c}\n", .{ c, self.delimiter.char });
 
             // Skip leading line break
-            if (self.content_writer.end == 0 and c == '\n') continue;
+            if (self.delimiter.multiline and self.content_writer.end == 0 and c == '\n') continue;
 
             if (c == self.delimiter.char) {
+                // Invalid escape
+                if (self.last_backslash_index != null) return error.UnexpectedChar;
+
                 delimiter_counter += 1;
                 if (self.delimiter.multiline) {
-                    if (delimiter_counter == 3) {
-                        self.content_writer.end -= 2;
-                        return;
-                    }
-                } else {
+                    if (delimiter_counter >= 6) return error.UnexpectedChar;
+                } else return;
+            } else {
+                if (delimiter_counter >= 3) {
+                    self.source.prev();
+                    self.content_writer.end -= 3;
                     return;
                 }
-            } else {
+
                 delimiter_counter = 0;
                 switch (c) {
-                    '\r', '\n' => if (!self.delimiter.multiline) return error.UnexpectedChar,
+                    '\r', '\n' => {
+                        if (self.delimiter.multiline) {
+                            if (self.last_backslash_index) |ix| {
+                                self.content_writer.end = ix;
+                                self.last_backslash_index = null;
+                                try self.skipSpacesAndLineBreaks();
+                                continue;
+                            }
+                        } else return error.UnexpectedChar;
+                    },
                     '\\' => if (self.delimiter.char == '"') {
+                        // Invalid escape
+                        if (self.last_backslash_index != null and !is_space(c)) return error.UnexpectedChar;
+
                         try self.scanEscaped();
                         continue;
                     },
-                    else => {},
+                    else => {
+                        // Invalid escape
+                        if (self.last_backslash_index != null and !is_space(c)) return error.UnexpectedChar;
+                    },
                 }
             }
 
             try self.content_writer.writeByte(c);
         }
+
+        if (delimiter_counter >= 3) {
+            self.content_writer.end -= 3;
+            return;
+        }
+
         return error.UnexpectedEndOfStream;
     }
 
@@ -82,24 +108,25 @@ const StringScanner = struct {
             '\"' => try w.writeByte('\"'),
             '\\' => try w.writeByte('\\'),
             '\r', '\n' => {
-                if (self.delimiter.multiline) {
-                    try self.skipSpacesAndLineBreaks();
-                } else {
+                if (self.delimiter.multiline)
+                    try self.skipSpacesAndLineBreaks()
+                else
                     return error.UnexpectedChar;
-                }
             },
-            else => return error.UnexpectedChar,
+            else => {
+                if (is_space(c)) {
+                    self.last_backslash_index = self.content_writer.end;
+                    try w.writeByte(c);
+                } else return error.UnexpectedChar;
+            },
         }
     }
 
     fn skipSpacesAndLineBreaks(self: *StringScanner) Error!void {
         while (try self.source.next()) |c| {
-            switch (c) {
-                ' ', '\t', '\r', '\n' => {},
-                else => {
-                    self.source.prev();
-                    break;
-                },
+            if (!is_space(c)) {
+                self.source.prev();
+                break;
             }
         }
     }
@@ -119,6 +146,13 @@ const StringScanner = struct {
     }
 };
 
+fn is_space(c: u8) bool {
+    return switch (c) {
+        ' ', '\t', '\r', '\n' => true,
+        else => false,
+    };
+}
+
 fn parseOpeningDelimiter(source: *Source) Error!?Delimiter {
     const c = try source.mustNext();
     switch (c) {
@@ -135,6 +169,7 @@ fn parseOpeningDelimiter(source: *Source) Error!?Delimiter {
                     return Delimiter{ .char = c, .multiline = true };
                 } else {
                     // Empty string
+                    source.prev();
                     return null;
                 }
             } else {
@@ -220,4 +255,10 @@ test scan {
     try testInput(
         \\"b\U0001f642c"
     , &.{.{ .kind = .string, .content = "b\u{1f642}c" }}, null);
+    try testInput(
+        \\"".
+    , &.{
+        .{ .kind = .string, .content = "" },
+        .{ .kind = .dot, .content = "" },
+    }, null);
 }
