@@ -11,13 +11,14 @@ const datetime = @import("./datetime.zig");
 const DefaultDateTypes = datetime.Simple;
 
 pub const Parsed = std.json.Parsed;
-pub const Error = Scanner.Error || std.fmt.ParseIntError || std.mem.Allocator.Error || datetime.Error || error{
+pub const Error = Scanner.Error || std.mem.Allocator.Error || datetime.Error || error{
     UnexpectedToken,
     NotStruct,
     InvalidValueType,
     DuplicateValue,
     InvalidToml,
     InvalidFloat,
+    InvalidInteger,
 };
 
 const debug = false;
@@ -172,7 +173,7 @@ fn Parser(comptime DateTypes: type) type {
 
             switch (token.kind) {
                 .string, .string_multiline => return TomlValue{ .string = try self.arena.allocator().dupe(u8, token.content) },
-                .integer => return TomlValue{ .integer = try std.fmt.parseInt(i64, token.content, 0) },
+                .integer => return TomlValue{ .integer = try parseInteger(token.content) },
                 .float => return TomlValue{ .float = try parseFloat(token.content) },
                 .true => return TomlValue{ .boolean = true },
                 .false => return TomlValue{ .boolean = false },
@@ -302,5 +303,33 @@ fn parseFloat(str: []const u8) error{InvalidFloat}!f64 {
         if (str[1] == '0' and (str[0] == '-' or str[0] == '+') and ix != 2) return error.InvalidFloat;
     }
 
+    return r;
+}
+
+fn parseInteger(str: []const u8) error{InvalidInteger}!i64 {
+    const r = std.fmt.parseInt(i64, str, 0) catch return error.InvalidInteger;
+    if (str[0] == '0') {
+        if (str.len > 1) {
+            switch (str[1]) {
+                '0'...'9', '_' => return error.InvalidInteger,
+                else => {},
+            }
+        }
+        if (str.len > 2 and (str[1] == 'B' or str[1] == 'X' or str[1] == 'O')) return error.InvalidInteger;
+    }
+    if (str[0] == '+' or str[0] == '-') {
+        if (str[1] == '0') {
+            if (str.len > 2) {
+                switch (str[2]) {
+                    '0'...'9', '_' => return error.InvalidInteger,
+                    'x', 'X', 'b', 'B', 'o', 'O' => return error.InvalidInteger,
+                    else => {},
+                }
+            }
+        }
+    }
+    for (str, 0..) |c, ix| {
+        if (c == '_' and str.len > ix + 1 and str[ix + 1] == '_') return error.InvalidInteger;
+    }
     return r;
 }
