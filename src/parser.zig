@@ -15,7 +15,7 @@ pub const Error = Scanner.Error || std.mem.Allocator.Error || datetime.Error || 
     UnexpectedToken,
     NotStruct,
     InvalidValueType,
-    DuplicateValue,
+    DuplicateField,
     InvalidToml,
     InvalidFloat,
     InvalidInteger,
@@ -246,18 +246,17 @@ fn Parser(comptime DateTypes: type) type {
             const key = token.content;
             const result = try table.data.getOrPut(alloc, key);
             if (result.found_existing) {
+                switch (result.value_ptr.*) {
+                    .array => |x| if (x.definition == .inlined) return error.InvalidToml,
+                    .table => |x| if (x.definition == .inlined) return error.InvalidToml,
+                    else => {},
+                }
+
                 switch (expected_closing_token) {
                     .equal => {
                         switch (result.value_ptr.*) {
                             .array => return error.InvalidToml,
                             .table => |x| if (x.definition == .header) return error.InvalidToml,
-                            else => {},
-                        }
-                    },
-                    .right_bracket, .double_right_bracket => {
-                        switch (result.value_ptr.*) {
-                            .array => |x| if (x.definition == .inlined) return error.InvalidToml,
-                            .table => |x| if (x.definition == .inlined) return error.InvalidToml,
                             else => {},
                         }
                     },
@@ -276,10 +275,13 @@ fn Parser(comptime DateTypes: type) type {
                     switch (result.value_ptr.*) {
                         .table => |*tab| return self.parseKeyChain(tab, expected_closing_token),
                         .array => |ar| return self.parseKeyChain(&ar.data.last().?.table, expected_closing_token),
-                        else => unreachable,
+                        else => return error.InvalidToml,
                     }
                 },
-                .equal, .right_bracket, .double_right_bracket => {},
+                .equal => {
+                    if (result.found_existing) return error.DuplicateField;
+                },
+                .right_bracket, .double_right_bracket => {},
                 else => return error.UnexpectedToken,
             }
 
