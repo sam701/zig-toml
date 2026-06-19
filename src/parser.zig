@@ -124,7 +124,7 @@ fn Parser(comptime DateTypes: type) type {
         }
 
         fn parseDocument(self: *Self) Error!TomlTable {
-            var root_table = TomlTable.init(.implicit);
+            var root_table = TomlTable.init(.implicit_body);
             var current_table = &root_table;
 
             while (true) {
@@ -153,6 +153,7 @@ fn Parser(comptime DateTypes: type) type {
                 .right_bracket => {
                     if (result.found_existing) {
                         if (result.value_ptr.* != .table) return error.InvalidToml;
+                        result.value_ptr.table.definition = .header;
                     } else result.value_ptr.* = TomlValue{ .table = TomlTable.init(.header) };
                     return &result.value_ptr.table;
                 },
@@ -271,7 +272,10 @@ fn Parser(comptime DateTypes: type) type {
                 .dot => {
                     if (debug) std.debug.print("parseKeyChain.dot key={s} found_existing={any}\n", .{ key, result.found_existing });
 
-                    if (!result.found_existing) result.value_ptr.* = TomlValue{ .table = TomlTable.init(.implicit) };
+                    if (!result.found_existing) {
+                        const source: value.Definition = if (expected_closing_token == .equal) .implicit_body else .implicit_header;
+                        result.value_ptr.* = TomlValue{ .table = TomlTable.init(source) };
+                    }
                     switch (result.value_ptr.*) {
                         .table => |*tab| return self.parseKeyChain(tab, expected_closing_token),
                         .array => |ar| return self.parseKeyChain(&ar.data.last().?.table, expected_closing_token),
@@ -281,9 +285,20 @@ fn Parser(comptime DateTypes: type) type {
                 .equal => {
                     if (result.found_existing) return error.DuplicateField;
                 },
-                .right_bracket, .double_right_bracket => {},
+                .right_bracket => {
+                    if (result.found_existing) {
+                        switch (result.value_ptr.*) {
+                            // Was already defined
+                            .table => |x| if (x.definition == .header or x.definition == .implicit_body) return error.InvalidToml,
+                            else => {},
+                        }
+                    }
+                },
+                .double_right_bracket => {},
                 else => return error.UnexpectedToken,
             }
+
+            if (token.kind != .dot and token.kind != expected_closing_token) return error.UnexpectedToken;
 
             return result;
         }

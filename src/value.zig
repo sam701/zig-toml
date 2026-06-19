@@ -34,7 +34,7 @@ pub fn Array(comptime DateTypes: type) type {
     };
 }
 
-pub const Definition = enum { header, inlined, implicit };
+pub const Definition = enum { header, inlined, implicit_header, implicit_body };
 
 pub fn Value(comptime DateTypes: type) type {
     return union(enum) {
