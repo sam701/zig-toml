@@ -58,7 +58,7 @@ pub const Scanner = struct {
     content_buffer: Writer.Allocating,
     source: Source,
 
-    pub const Error = Source.Error || error{ UnexpectedChar, InvalidUnicode };
+    pub const Error = Source.Error || error{ UnexpectedChar, InvalidUnicode, InvalidUtf8 };
 
     pub fn init(reader: *Reader, alloc: Allocator) error{OutOfMemory}!Self {
         return .{
@@ -174,12 +174,15 @@ pub const Scanner = struct {
     }
 
     fn skipUntilNewLine(self: *Self) Error!void {
+        var utf8_verifier = string.Utf8Verifier{};
         while (try self.source.next()) |c| {
+            try utf8_verifier.verify(c);
             if (c == '\n') {
                 self.source.prev();
                 break;
             }
         }
+        try utf8_verifier.done();
     }
 };
 

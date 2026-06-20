@@ -32,6 +32,8 @@ const StringScanner = struct {
     last_backslash_index: ?usize = null,
 
     fn scan(self: *StringScanner) Error!void {
+        var utf8_verifier: Utf8Verifier = .{};
+
         // std.log.debug("current={}", .{self.source.current.?});
         var delimiter_counter: usize = 0;
         while (try self.source.next()) |c| {
@@ -47,11 +49,15 @@ const StringScanner = struct {
                 delimiter_counter += 1;
                 if (self.delimiter.multiline) {
                     if (delimiter_counter >= 6) return error.UnexpectedChar;
-                } else return;
+                } else {
+                    try utf8_verifier.done();
+                    return;
+                }
             } else {
                 if (delimiter_counter >= 3) {
                     self.source.prev();
                     self.content_writer.end -= 3;
+                    try utf8_verifier.done();
                     return;
                 }
 
@@ -81,6 +87,7 @@ const StringScanner = struct {
                 }
             }
 
+            try utf8_verifier.verify(c);
             try self.content_writer.writeByte(c);
         }
 
@@ -262,3 +269,30 @@ test scan {
         .{ .kind = .dot, .content = "" },
     }, null);
 }
+
+pub const Utf8Verifier = struct {
+    buf: [4]u8 = undefined,
+    unicode_len: u8 = 0,
+    yet_to_write: u8 = 0,
+
+    pub fn verify(self: *Utf8Verifier, c: u8) error{InvalidUtf8}!void {
+        if (self.yet_to_write == 0) {
+            const utf8Len = std.unicode.utf8ByteSequenceLength(c) catch return error.InvalidUtf8;
+            if (utf8Len == 1) return;
+            self.buf[0] = c;
+            self.unicode_len = utf8Len;
+            self.yet_to_write = utf8Len - 1;
+        } else {
+            if (c < 0x80 or c > 0xBF) return error.InvalidUtf8;
+            self.buf[self.unicode_len - self.yet_to_write] = c;
+            self.yet_to_write -= 1;
+            if (self.yet_to_write == 0) {
+                _ = std.unicode.utf8Decode(self.buf[0..self.unicode_len]) catch return error.InvalidUtf8;
+            }
+        }
+    }
+
+    pub fn done(self: Utf8Verifier) error{InvalidUtf8}!void {
+        if (self.yet_to_write > 0) return error.InvalidUtf8;
+    }
+};
