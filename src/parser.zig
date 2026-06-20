@@ -134,6 +134,7 @@ fn Parser(comptime DateTypes: type) type {
                         self.ungetToken();
                         const result = try self.parseKeyChain(current_table, .equal);
                         result.value_ptr.* = try self.parseValue();
+                        try self.consumeLineBreakOrEOF();
                     },
                     .left_bracket => current_table = try self.parseTableHeader(&root_table, .right_bracket),
                     .double_left_bracket => current_table = try self.parseTableHeader(&root_table, .double_right_bracket),
@@ -144,6 +145,16 @@ fn Parser(comptime DateTypes: type) type {
             }
 
             return root_table;
+        }
+
+        fn consumeLineBreakOrEOF(
+            self: *Self,
+        ) Error!void {
+            const token = try self.nextToken(null);
+            switch (token.kind) {
+                .line_break, .end_of_document => {},
+                else => return error.UnexpectedToken,
+            }
         }
 
         fn parseTableHeader(self: *Self, root_table: *TomlTable, expected_closing_token: TokenKind) Error!*TomlTable {
@@ -293,8 +304,11 @@ fn Parser(comptime DateTypes: type) type {
                             else => {},
                         }
                     }
+                    try self.consumeLineBreakOrEOF();
                 },
-                .double_right_bracket => {},
+                .double_right_bracket => {
+                    try self.consumeLineBreakOrEOF();
+                },
                 else => return error.UnexpectedToken,
             }
 
