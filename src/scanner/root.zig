@@ -175,11 +175,23 @@ pub const Scanner = struct {
 
     fn skipUntilNewLine(self: *Self) Error!void {
         var utf8_verifier = string.Utf8Verifier{};
+        var prev_cr = false;
         while (try self.source.next()) |c| {
             try utf8_verifier.verify(c);
-            if (c == '\n') {
-                self.source.prev();
-                break;
+            switch (c) {
+                0x0...0x08, 0x0b, 0x0c, 0x0e...0x1f, 0x7f => {
+                    std.log.debug("char was {x}", .{c});
+                    return error.UnexpectedChar;
+                },
+                '\r' => prev_cr = true,
+                '\n' => {
+                    self.source.prev();
+                    break;
+                },
+                else => {
+                    if (prev_cr) return error.UnexpectedChar;
+                    prev_cr = false;
+                },
             }
         }
         try utf8_verifier.done();
