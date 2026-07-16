@@ -29,16 +29,16 @@ pub fn intoStruct(ctx: *Context, comptime T: type, dest: *T, table: *Table) !voi
     }
     switch (@typeInfo(T)) {
         .@"struct" => |info| {
-            inline for (info.field_names, info.field_types, info.field_attrs) |field_name, FieldType, field_attr| {
-                try ctx.field_path.append(ctx.alloc, field_name);
-                if (table.fetchRemove(field_name)) |entry| {
-                    try setValue(ctx, FieldType, &@field(dest.*, field_name), &entry.value);
+            inline for (info.fields) |field| {
+                try ctx.field_path.append(ctx.alloc, field.name);
+                if (table.fetchRemove(field.name)) |entry| {
+                    try setValue(ctx, field.type, &@field(dest.*, field.name), &entry.value);
                     ctx.alloc.free(entry.key);
                 } else {
-                    if (@typeInfo(FieldType) == .optional)
-                        @field(dest.*, field_name) = null
-                    else if (field_attr.default_value_ptr) |defaultValue| {
-                        @field(dest.*, field_name) = @as(*const FieldType, @ptrCast(@alignCast(defaultValue))).*;
+                    if (@typeInfo(field.type) == .optional)
+                        @field(dest.*, field.name) = null
+                    else if (field.defaultValue()) |defaultValue| {
+                        @field(dest.*, field.name) = defaultValue;
                     } else return error.MissingRequiredField;
                 }
                 _ = ctx.field_path.pop();
