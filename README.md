@@ -46,8 +46,11 @@ Add `zig-toml` to your `build.zig.zon`
 # For zig-master
 zig fetch --save git+https://github.com/sam701/zig-toml
 
-# For zig 0.13
-zig fetch --save git+https://github.com/sam701/zig-toml#last-zig-0.13
+# For zig 0.16
+zig fetch --save git+https://github.com/sam701/zig-toml#zig-0.16
+
+# For zig 0.15
+zig fetch --save git+https://github.com/sam701/zig-toml#zig-0.15
 ```
 
 ## Example
