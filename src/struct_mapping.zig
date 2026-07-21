@@ -184,7 +184,7 @@ fn setValue(ctx: *Context, comptime T: type, dest: *T, value: *const Value) !voi
                 .string => |s| {
                     inline for (tinfo.field_names, tinfo.field_values) |field_name, field_value| {
                         if (std.mem.eql(u8, field_name, s)) {
-                            dest.* = @enumFromInt(field_value);
+                            dest.* = @fromBackingInt(@intCast(field_value));
                             break;
                         }
                     } else {
