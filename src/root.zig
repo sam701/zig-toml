@@ -104,6 +104,10 @@ pub fn Parser(comptime Target: type) type {
 
             const stat = try file.stat(io);
             const size = stat.size;
+            // File is empty, but `sendFileAll` requires a non-empty dest buffer. Just skip the
+            // file read.
+            if (size == 0) return self.parseString("");
+
             const content = try self.alloc.alloc(u8, size);
             defer self.alloc.free(content);
 
