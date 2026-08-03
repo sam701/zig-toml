@@ -203,3 +203,40 @@ test "deinit table" {
     _ = parsed.value;
     defer parsed.deinit();
 }
+
+test "empty file" {
+    var p = main.Parser(main.Table).init(testing.allocator);
+    defer p.deinit();
+
+    const parsed = try p.parseFile(std.testing.io, "./test/empty.toml.txt");
+    defer parsed.deinit();
+
+    try testing.expect(parsed.value.count() == 0);
+}
+
+test "empty file into struct" {
+    const Opts = struct {
+        aa: ?i64,
+        bb: i64 = 33,
+    };
+
+    var p = main.Parser(Opts).init(testing.allocator);
+    defer p.deinit();
+
+    const parsed = try p.parseFile(std.testing.io, "./test/empty.toml.txt");
+    defer parsed.deinit();
+
+    try testing.expect(parsed.value.aa == null);
+    try testing.expect(parsed.value.bb == 33);
+}
+
+test "empty file into struct with a required field" {
+    const Opts = struct {
+        aa: i64,
+    };
+
+    var p = main.Parser(Opts).init(testing.allocator);
+    defer p.deinit();
+
+    try testing.expectError(error.MissingRequiredField, p.parseFile(std.testing.io, "./test/empty.toml.txt"));
+}
