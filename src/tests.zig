@@ -9,6 +9,13 @@ comptime {
     _ = @import("./serialize/tests.zig");
 }
 
+fn containsStr(haystack: []const []const u8, needle: []const u8) bool {
+    for (haystack) |s| {
+        if (std.mem.eql(u8, s, needle)) return true;
+    }
+    return false;
+}
+
 test "full" {
     var p = main.Parser(main.Table).init(testing.allocator);
     defer p.deinit();
@@ -239,4 +246,69 @@ test "empty file into struct with a required field" {
     defer p.deinit();
 
     try testing.expectError(error.MissingRequiredField, p.parseFile(std.testing.io, "./test/empty.toml.txt"));
+}
+
+test "disallow unknown fields collects all unknown keys" {
+    const Cfg = struct {
+        name: []const u8,
+    };
+
+    var p = main.Parser(Cfg).init(testing.allocator);
+    p.options.disallow_unknown_fields = true;
+    defer p.deinit();
+
+    try testing.expectError(error.UnknownField, p.parseString(
+        \\name = "ok"
+        \\nam = "typo"
+        \\naem = "typo2"
+    ));
+
+    const info = p.error_info.?.unknown_fields;
+    try testing.expectEqual(@as(usize, 0), info.path.len);
+    try testing.expectEqual(@as(usize, 2), info.keys.len);
+    try testing.expect(containsStr(info.keys, "nam"));
+    try testing.expect(containsStr(info.keys, "naem"));
+}
+
+test "disallow unknown fields reports nested table keys" {
+    const Sub = struct {
+        id: i64,
+    };
+    const Cfg = struct {
+        sub: Sub,
+    };
+
+    var p = main.Parser(Cfg).init(testing.allocator);
+    p.options.disallow_unknown_fields = true;
+    defer p.deinit();
+
+    try testing.expectError(error.UnknownField, p.parseString(
+        \\[sub]
+        \\id = 1
+        \\extra = 2
+        \\bogus = 3
+    ));
+
+    const info = p.error_info.?.unknown_fields;
+    try testing.expectEqual(@as(usize, 1), info.path.len);
+    try testing.expectEqualStrings("sub", info.path[0]);
+    try testing.expectEqual(@as(usize, 2), info.keys.len);
+    try testing.expect(containsStr(info.keys, "extra"));
+    try testing.expect(containsStr(info.keys, "bogus"));
+}
+
+test "unknown fields are ignored by default" {
+    const Cfg = struct {
+        name: []const u8 = "default",
+    };
+
+    var p = main.Parser(Cfg).init(testing.allocator);
+    defer p.deinit();
+
+    const parsed = try p.parseString(
+        \\nam = "typo"
+    );
+    defer parsed.deinit();
+
+    try testing.expectEqualStrings("default", parsed.value.name);
 }

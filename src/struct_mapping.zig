@@ -9,6 +9,8 @@ const datetime = @import("./datetime.zig");
 pub const Context = struct {
     alloc: std.mem.Allocator,
     field_path: std.ArrayListUnmanaged([]const u8),
+    disallow_unknown_fields: bool = false,
+    unknown_fields: std.ArrayListUnmanaged([]const u8) = .empty,
 
     pub fn init(alloc: std.mem.Allocator) Context {
         return .{
@@ -42,6 +44,14 @@ pub fn intoStruct(ctx: *Context, comptime T: type, dest: *T, table: *Table) !voi
                     } else return error.MissingRequiredField;
                 }
                 _ = ctx.field_path.pop();
+            }
+            if (ctx.disallow_unknown_fields and table.count() > 0) {
+                // matched keys were fetchRemove'd, so the rest are unknown; arena frees them
+                var it = table.iterator();
+                while (it.next()) |entry| {
+                    try ctx.unknown_fields.append(ctx.alloc, entry.key_ptr.*);
+                }
+                return error.UnknownField;
             }
             var it = table.iterator();
             while (it.next()) |entry| {

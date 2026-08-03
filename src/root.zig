@@ -54,9 +54,21 @@ pub const serialize = @import("serialize/root.zig").serialize;
 pub const Position = parser.Position;
 pub const FieldPath = []const []const u8;
 
+pub const UnknownFields = struct {
+    /// Struct-field path to the table with the unknown keys; empty at root.
+    path: FieldPath,
+    keys: []const []const u8,
+};
+
 pub const ErrorInfo = union(enum) {
     parse: Position,
     struct_mapping: FieldPath,
+    unknown_fields: UnknownFields,
+};
+
+pub const Options = struct {
+    /// Fail with error.UnknownField on a key that matches no struct field.
+    disallow_unknown_fields: bool = false,
 };
 
 pub fn Parsed(comptime T: type) type {
@@ -75,6 +87,7 @@ pub fn Parser(comptime Target: type) type {
         const Self = @This();
 
         alloc: std.mem.Allocator,
+        options: Options = .{},
         error_info: ?ErrorInfo = null,
 
         pub fn init(alloc: std.mem.Allocator) Self {
@@ -91,11 +104,28 @@ pub fn Parser(comptime Target: type) type {
             if (self.error_info) |einfo| {
                 switch (einfo) {
                     .struct_mapping => |field_path| {
+                        for (field_path) |segment| self.alloc.free(segment);
                         self.alloc.free(field_path);
+                    },
+                    .unknown_fields => |uf| {
+                        for (uf.path) |segment| self.alloc.free(segment);
+                        self.alloc.free(uf.path);
+                        for (uf.keys) |key| self.alloc.free(key);
+                        self.alloc.free(uf.keys);
                     },
                     else => {},
                 }
             }
+            self.error_info = null;
+        }
+
+        fn dupeStrings(self: *Self, items: []const []const u8) ![]const []const u8 {
+            const copy = try self.alloc.alloc([]const u8, items.len);
+            errdefer self.alloc.free(copy);
+            for (items, 0..) |segment, i| {
+                copy[i] = try self.alloc.dupe(u8, segment);
+            }
+            return copy;
         }
 
         pub fn parseFile(self: *Self, io: std.Io, filename: []const u8) !Parsed(Target) {
@@ -140,11 +170,20 @@ pub fn Parser(comptime Target: type) type {
             }
 
             var mapping_ctx = struct_mapping.Context.init(alloc);
+            mapping_ctx.disallow_unknown_fields = self.options.disallow_unknown_fields;
 
             var dest: Target = undefined;
             struct_mapping.intoStruct(&mapping_ctx, Target, &dest, &tab) catch |err| {
                 self.freeErrorInfo();
-                self.error_info = ErrorInfo{ .struct_mapping = try self.alloc.dupe([]const u8, mapping_ctx.field_path.items) }; // i suspect this might leak memory (the outer array is copied, but not inner ones). But it doesn't seem to leak. Strange.
+                // dupe into the parser allocator so error_info outlives the arena
+                if (mapping_ctx.unknown_fields.items.len > 0) {
+                    self.error_info = ErrorInfo{ .unknown_fields = .{
+                        .path = try self.dupeStrings(mapping_ctx.field_path.items),
+                        .keys = try self.dupeStrings(mapping_ctx.unknown_fields.items),
+                    } };
+                } else {
+                    self.error_info = ErrorInfo{ .struct_mapping = try self.dupeStrings(mapping_ctx.field_path.items) };
+                }
                 return err;
             };
             return .{ .arena = arena, .value = dest };
