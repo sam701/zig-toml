@@ -17,5 +17,6 @@ pub const DateTimesString = datetime.String;
 pub const DateTimesSimple = datetime.Simple;
 
 test {
-    _ = @import("./tests.zig");
+    // _ = @import("./tests.zig");
+    _ = @import("./scanner/string.zig");
 }

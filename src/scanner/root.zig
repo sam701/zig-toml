@@ -186,6 +186,7 @@ pub const Scanner = struct {
                 '\r' => prev_cr = true,
                 '\n' => {
                     self.source.prev();
+                    prev_cr = false;
                     break;
                 },
                 else => {
@@ -194,6 +195,7 @@ pub const Scanner = struct {
                 },
             }
         }
+        if (prev_cr) return error.UnexpectedChar;
         try utf8_verifier.done();
     }
 };
