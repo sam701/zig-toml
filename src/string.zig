@@ -10,7 +10,7 @@ pub fn parse(ctx: *Context) !?[]const u8 {
     return parseString(ctx, &delimiter);
 }
 
-const Buffer = std.ArrayListUnmanaged(u8);
+const Buffer = std.ArrayList(u8);
 
 pub fn parseSingleLine(ctx: *Context) !?[]const u8 {
     var ctx2 = ctx.*;

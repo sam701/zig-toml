@@ -43,7 +43,7 @@ pub const Key = union(enum) {
 };
 
 fn parseDotted(ctx: *parser.Context, first: parser.String) !Key {
-    var ar: std.ArrayListUnmanaged(parser.String) = .empty;
+    var ar: std.ArrayList(parser.String) = .empty;
     try ar.append(ctx.alloc, first);
     while (ctx.current()) |cur| {
         if (cur != '.') break;

@@ -10,7 +10,7 @@ const LangType = std.lang.Type;
 
 const SerializerState = struct {
     allocator: Allocator,
-    table_comp: std.ArrayListUnmanaged([]const u8),
+    table_comp: std.ArrayList([]const u8),
 
     const Self = @This();
 

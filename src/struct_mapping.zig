@@ -8,9 +8,9 @@ const datetime = @import("./datetime.zig");
 
 pub const Context = struct {
     alloc: std.mem.Allocator,
-    field_path: std.ArrayListUnmanaged([]const u8),
+    field_path: std.ArrayList([]const u8),
     disallow_unknown_fields: bool = false,
-    unknown_fields: std.ArrayListUnmanaged([]const u8) = .empty,
+    unknown_fields: std.ArrayList([]const u8) = .empty,
 
     pub fn init(alloc: std.mem.Allocator) Context {
         return .{
