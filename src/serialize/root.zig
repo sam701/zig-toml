@@ -331,7 +331,7 @@ fn serializeMap(state: *SerializerState, value: anytype, writer: *std.Io.Writer)
 }
 
 inline fn hasStringType(t: LangType) bool {
-    return ((t.pointer.child == u8 and t.pointer.size == .slice) or (@typeInfo(t.pointer.child) == .array and @typeInfo(t.pointer.child).array.child == u8) and t.pointer.attrs.@"const");
+    return ((t.pointer.child == u8 and t.pointer.size == .slice) or ((@typeInfo(t.pointer.child) == .array and @typeInfo(t.pointer.child).array.child == u8) and t.pointer.attrs.@"const"));
 }
 
 inline fn isMapType(val_t: type) bool {
