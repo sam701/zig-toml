@@ -24,7 +24,18 @@ pub const Context = struct {
     }
 };
 
-pub fn intoStruct(ctx: *Context, comptime T: type, dest: *T, table: *Table) !void {
+/// Errors when reading a table into a struct.
+pub const SetValueError = error{
+    OutOfMemory,
+    InvalidValueType,
+    InvalidArrayLength,
+    NotSupportedFieldType,
+    MissingRequiredField,
+    UnknownField,
+    IntegerOutOfRange,
+};
+
+pub fn intoStruct(ctx: *Context, comptime T: type, dest: *T, table: *Table) SetValueError!void {
     if (std.meta.hasFn(T, "tomlIntoStruct")) {
         dest.* = try T.tomlIntoStruct(ctx, table);
         return;
@@ -60,11 +71,11 @@ pub fn intoStruct(ctx: *Context, comptime T: type, dest: *T, table: *Table) !voi
             }
             table.deinit();
         },
-        else => unreachable,
+        else => comptime unreachable,
     }
 }
 
-fn setValue(ctx: *Context, comptime T: type, dest: *T, value: *const Value) !void {
+fn setValue(ctx: *Context, comptime T: type, dest: *T, value: *const Value) SetValueError!void {
     switch (T) {
         Table => {
             dest.* = value.table.*;
@@ -103,7 +114,7 @@ fn setValue(ctx: *Context, comptime T: type, dest: *T, value: *const Value) !voi
         .int => {
             switch (value.*) {
                 .integer => |x| {
-                    dest.* = @intCast(x);
+                    dest.* = std.math.cast(T, x) orelse return error.IntegerOutOfRange;
                 },
                 else => return error.InvalidValueType,
             }

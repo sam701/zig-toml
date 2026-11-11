@@ -312,3 +312,15 @@ test "unknown fields are ignored by default" {
 
     try testing.expectEqualStrings("default", parsed.value.name);
 }
+
+test "no crash with integer out of range" {
+    const Config = struct { volume: u8 = 7 };
+
+    var p = main.Parser(Config).init(testing.allocator);
+    defer p.deinit();
+    const parsed = p.parseString("volume = 300\n") catch |err| switch (err) {
+        error.IntegerOutOfRange => return,
+        else => return err,
+    };
+    defer parsed.deinit();
+}
