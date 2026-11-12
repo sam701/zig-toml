@@ -70,6 +70,8 @@ test "parse into struct" {
         aa3: i16 = 500,
         bb: []const u8,
         bb2: []const u8 = "test1",
+        bs: [:0]const u8,
+        bs2: ?[:0]const u8,
         b1: bool,
         cc: []i64,
         dd: []const []const u8,
@@ -111,6 +113,8 @@ test "parse into struct" {
     try testing.expect(std.mem.eql(u8, aa.bb, "abcЖ"));
     try testing.expectEqual("test1", aa.bb2);
     try testing.expect(aa.b1 == true);
+    try testing.expectEqualSentinel(u8, 0, "sentinel here->", aa.bs);
+    try testing.expect(aa.bs2 == null);
     try testing.expect(aa.f1 == 125.55);
     try testing.expect(aa.f1a == 99.5);
     try testing.expect(aa.f1b == 99.0);
