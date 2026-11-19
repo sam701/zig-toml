@@ -152,7 +152,12 @@ fn setValue(ctx: *Context, comptime T: type, dest: *T, value: *const Value) SetV
                 u8 => {
                     switch (value.*) {
                         .string => |x| {
-                            dest.* = x;
+                            if (tinfo.sentinel()) |sentinel| {
+                                dest.* = try ctx.alloc.dupeSentinel(u8, x, sentinel);
+                                ctx.alloc.free(x);
+                            } else {
+                                dest.* = x;
+                            }
                         },
                         else => return error.InvalidValueType,
                     }
